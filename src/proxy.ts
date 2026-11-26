@@ -82,6 +82,11 @@ async function sandboxProxy(req: NextRequest) {
   clearTenantHeaders(requestHeaders)
   const pathname = req.nextUrl.pathname
 
+  // Global cron endpoints authenticate their own secret; outbound delivery stays blocked by Demo guards.
+  if (pathname === '/api/cron/accounting-alerts' || pathname === '/api/cron/hr-notifications') {
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
+
   // This branch is a sandbox, including immutable Vercel Preview aliases.
   if (['/init','/register','/onboarding','/forgot-password','/reset-password','/portal/register','/portal/forgot-password','/portal/reset-password'].includes(pathname)) {
     const login = new URL(pathname.startsWith('/portal') ? '/portal/login' : '/login', req.url)

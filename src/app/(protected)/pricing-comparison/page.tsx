@@ -1,4 +1,7 @@
 'use client'
+import { normalizeMiamiRateDestination, selectMiamiDestinationRates, hasMiamiFreightRates } from '@/src/lib/miami-rate-destination'
+
+import { calculateMiamiAir } from '@/src/lib/miami-air-calculator'
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -145,6 +148,7 @@ type CargoLine = {
 }
 
 type ClientRate = {
+  miami_rate_destination?: string | null
   rate_code: string
   rate_label: string
   category: string
@@ -726,7 +730,7 @@ function PricingComparisonContent() {
 
     const { data: ratesData } = await supabase
       .from('client_rates')
-      .select('rate_code, rate_label, category, unit, currency, amount, notes, is_active')
+      .select('rate_code, rate_label, category, unit, currency, amount, notes, is_active, miami_rate_destination')
       .eq('cliente_id', quote.cliente_id)
       .eq('is_active', true)
 
@@ -739,7 +743,7 @@ function PricingComparisonContent() {
       : { data: [] }
 
     if (selectedQuoteIdRef.current === quote.id) {
-      setClientRates((ratesData || []) as ClientRate[])
+      setClientRates(selectMiamiDestinationRates((ratesData || []) as ClientRate[], normalizeMiamiRateDestination(quote.miami_rate_destination)))
       setSurchargeRules((surchargeData || []) as SurchargeRule[])
     }
   }
@@ -1857,6 +1861,10 @@ function PricingComparisonContent() {
       return
     }
 
+    if (!selectedQuote.miami_rate_destination || !hasMiamiFreightRates(clientRates, 'miami_lcl')) {
+      toast.error('Confirma el destino tarifario en la cotización y configura sus tarifas antes de recalcular.')
+      return
+    }
     const result = calculateMiamiLcl({
       ft3: totalCargoFt3,
       lbs: totalCargoLbs,
@@ -1951,7 +1959,13 @@ function PricingComparisonContent() {
     if (!ensureQuoteIsEditable()) return
 
     const airRate = getRateAmount('consolidado_aereo_kg')
-    const airFreight = totalCargoKg * airRate
+    if (!selectedQuote.miami_rate_destination || !hasMiamiFreightRates(clientRates, 'miami_air')) {
+      toast.error('Confirma el destino tarifario en la cotización y configura sus tarifas antes de recalcular.')
+      return
+    }
+    const weights = getAirConsolidatedWeights()
+    const result = calculateMiamiAir(weights.actualWeightKg, totalCargoCbm || Number(selectedQuote.volumen_cbm || 0), airRate, surchargeRules)
+    const airFreight = result.freight
 
     const { error } = await supabase
       .from('pricing_items')
@@ -1959,7 +1973,7 @@ function PricingComparisonContent() {
         sale_amount: airFreight,
         tax_amount: 0,
         total_amount: airFreight,
-        notes: `Recalculado: KG ${totalCargoKg.toFixed(
+        notes: `Recalculado: KG facturable ${result.chargeableWeightKg.toFixed(
           2
         )} x tarifa USD ${airRate.toFixed(2)}.`,
       })

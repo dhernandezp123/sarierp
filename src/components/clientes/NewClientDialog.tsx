@@ -55,12 +55,20 @@ const initialForm = {
   vendedor_asignado: '',
 }
 
+export type CreatedClient = { id: string; codigo_cliente: string | null; nombre: string | null }
+
 export default function NewClientDialog({
   open,
   onOpenChange,
+  initialName = '',
+  onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Texto buscado en el selector; se usa como nombre inicial. */
+  initialName?: string
+  /** Si se indica, la pantalla que abrió el diálogo selecciona el cliente creado. */
+  onCreated?: (cliente: CreatedClient) => void | Promise<void>
 }) {
   const { profile } = useUser()
   const router = useRouter()
@@ -68,6 +76,15 @@ export default function NewClientDialog({
   const [form, setForm] = useState(initialForm)
   const [vendedores, setVendedores] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+
+  // Al abrir desde un selector, el nombre buscado se precarga (sin pisar lo ya escrito).
+  useEffect(() => {
+    if (!open || !initialName.trim()) return
+    const timer = window.setTimeout(() => {
+      setForm((current) => (current.nombre ? current : { ...current, nombre: initialName.trim() }))
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [open, initialName])
 
   useEffect(() => {
     if (!open || vendedores.length > 0) return
@@ -127,6 +144,20 @@ export default function NewClientDialog({
 
     if (error) {
       toast.error(error)
+      return
+    }
+
+    if (onCreated && cliente) {
+      // Sin navegar: la pantalla de origen conserva lo que el usuario llevaba escrito.
+      await onCreated(cliente as CreatedClient)
+      toast.success(
+        cliente.codigo_cliente
+          ? `Cliente ${cliente.codigo_cliente} creado y seleccionado`
+          : 'Cliente creado y seleccionado',
+        { description: 'Completa dirección, correos adicionales y seguro después en su perfil.' }
+      )
+      setForm(initialForm)
+      onOpenChange(false)
       return
     }
 

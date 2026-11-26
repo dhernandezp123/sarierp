@@ -19,7 +19,7 @@ test('PDF comercial Miami LCL/aéreo respeta seguro e ISV opcionales y protege d
       assert.equal(pricing.error, null)
       let layout
       const document = React.cloneElement(QuotationPDF({
-        quotation: { quotation_number: 'TEST-MIAMI', service_product: product, quote_type: product === 'miami_lcl' ? 'LCL' : 'Consolidado', status: 'Pricing Aprobado', requires_insurance: requested, commercial_value: 1000, pricing_notes: 'INTERNAL-SECRET', cliente: { nombre: 'Cliente de prueba', asegura_carga: true, seguro_porcentaje: 1 } },
+        quotation: { quotation_number: 'TEST-MIAMI', miami_rate_destination: 'TGU', service_product: product, quote_type: product === 'miami_lcl' ? 'LCL' : 'Consolidado', status: 'Pricing Aprobado', requires_insurance: requested, commercial_value: 1000, pricing_notes: 'INTERNAL-SECRET', cliente: { nombre: 'Cliente de prueba', asegura_carga: true, seguro_porcentaje: 1 } },
         pricingItems: pricing.items.map((item, index) => ({ ...item, id: String(index) })), selectedAgent: null,
       }), { onRender: result => { layout = result._INTERNAL__LAYOUT__DATA_ } })
       const blob = await renderer.pdf(document).toBlob()
@@ -31,6 +31,8 @@ test('PDF comercial Miami LCL/aéreo respeta seguro e ISV opcionales y protege d
       }
       collect(layout)
       const text = printed.join('\n')
+      assert.match(text, /Tarifa destino:/)
+      assert.match(text, /Tegucigalpa/)
       if (requested) {
         assert.match(text, /Seguro de Carga/)
         assert.match(text, /75\.00/)

@@ -1,0 +1,460 @@
+{
+    "at":  "2026-11-20T22:33:29.294Z",
+    "status":  "Published to Production; real HR setup and authenticated operational UAT pending",
+    "pullRequest":  "https://github.com/dhernandezp123/sarierp/pull/1",
+    "validatedHead":  "893c97fa00620a4bce5bb4d8b907b8198428fb3c",
+    "publishedCommit":  "a3d13c44cbd639d1a1c943ac77557fa1e911485e",
+    "gitTree":  "2b06b89e63f945971e577207d3c6a1ed905b9e90",
+    "ci":  {
+               "pullRequestRun":  "44827684587",
+               "mainRun":  "44828646626",
+               "application":  "success",
+               "database":  "success",
+               "nodeTests":  691
+           },
+    "deployment":  {
+                       "id":  "dpl_ZSSpD3qCFCb1vZbJj9wjwdjgFGRq",
+                       "url":  "sarierp-iha65uohw-claudherhn-5641s-projects.vercel.app",
+                       "state":  "READY",
+                       "target":  "production",
+                       "aliases":  [
+                                       "forwarders.app",
+                                       "sarierp.vercel.app",
+                                       "sari.forwarders.app",
+                                       "sarierp-claudherhn-5641s-projects.vercel.app",
+                                       "sarierp-git-main-claudherhn-5641s-projects.vercel.app"
+                                   ],
+                       "commit":  "a3d13c44cbd639d1a1c943ac77557fa1e911485e",
+                       "commitEvidence":  "GitHub Vercel success status target matches deployment ID"
+                   },
+    "sql":  {
+                "at":  "2026-11-20T22:26:23.273Z",
+                "project":  "fwspgdzvlbtbgiupvrzo",
+                "checks":  [
+                               "All six installed migration sources match reviewed SHA-256 manifest",
+                               "All 19 HR tables enforce RLS and disallow direct authenticated writes",
+                               "Signed documents bucket is private, 10 MB, PDF/PNG/JPEG",
+                               "Upload and email-dispatch RPCs executable by service_role only",
+                               "Restrictive Storage guards present"
+                           ],
+                "postflight":  {
+                                   "bucket":  {
+                                                  "max_bytes":  10485760,
+                                                  "mime_types":  [
+                                                                     "application/pdf",
+                                                                     "image/png",
+                                                                     "image/jpeg"
+                                                                 ],
+                                                  "public":  false
+                                              },
+                                   "environment":  "production",
+                                   "hr_versions":  [
+                                                       {
+                                                           "name":  "hr_employees_and_leave",
+                                                           "sha256":  "e4d38c4b5fbc6b49bcd4d4c8e483ffd3fdffbe2f6bd8d603127d08832543123b",
+                                                           "version":  "20261118120000"
+                                                       },
+                                                       {
+                                                           "name":  "hr_vacation_periods",
+                                                           "sha256":  "cb02b224ee4aaeafb0caec5f221904c73d55df944b36c664956291566a46df95",
+                                                           "version":  "20261119120000"
+                                                       },
+                                                       {
+                                                           "name":  "hr_activity_and_calendar",
+                                                           "sha256":  "f5c07b519ade7783240b4c965c25645d02c148d032706f26b5abc8e04f6cc5b4",
+                                                           "version":  "20261120141000"
+                                                       },
+                                                       {
+                                                           "name":  "hr_certificates_and_private_documents",
+                                                           "sha256":  "64100f5a03ca59cd015d148e2340fe88ca8b356eb4ef2f54561604c6467ebd85",
+                                                           "version":  "20261120151000"
+                                                       },
+                                                       {
+                                                           "name":  "hr_email_outbox",
+                                                           "sha256":  "55b198caaf0e0e389965f0622b348823609de71614b4e1bc1536c011359025d3",
+                                                           "version":  "20261120161000"
+                                                       },
+                                                       {
+                                                           "name":  "hr_payroll",
+                                                           "sha256":  "8d15ffb062b8bcd8e2671856cb1cfeb05eeb6751e987545e06bde82e2a2f7a78",
+                                                           "version":  "20261120171000"
+                                                       }
+                                                   ],
+                                   "private_rpc":  {
+                                                       "mail_authenticated":  false,
+                                                       "mail_service":  true,
+                                                       "upload_authenticated":  false,
+                                                       "upload_service":  true
+                                                   },
+                                   "row_counts":  {
+                                                      "email_queue":  0,
+                                                      "employees":  0,
+                                                      "leave_requests":  0,
+                                                      "payroll_runs":  0,
+                                                      "signed_documents":  0
+                                                  },
+                                   "storage_policies":  [
+                                                            {
+                                                                "cmd":  "ALL",
+                                                                "name":  "hr_documents_anon_guard",
+                                                                "permissive":  "RESTRICTIVE"
+                                                            },
+                                                            {
+                                                                "cmd":  "DELETE",
+                                                                "name":  "hr_documents_delete_guard",
+                                                                "permissive":  "RESTRICTIVE"
+                                                            },
+                                                            {
+                                                                "cmd":  "INSERT",
+                                                                "name":  "hr_documents_insert_guard",
+                                                                "permissive":  "RESTRICTIVE"
+                                                            },
+                                                            {
+                                                                "cmd":  "SELECT",
+                                                                "name":  "hr_documents_read",
+                                                                "permissive":  "PERMISSIVE"
+                                                            },
+                                                            {
+                                                                "cmd":  "SELECT",
+                                                                "name":  "hr_documents_read_guard",
+                                                                "permissive":  "RESTRICTIVE"
+                                                            },
+                                                            {
+                                                                "cmd":  "UPDATE",
+                                                                "name":  "hr_documents_update_guard",
+                                                                "permissive":  "RESTRICTIVE"
+                                                            }
+                                                        ],
+                                   "tables":  [
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_certificate_sequences",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_certificates",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_compensation",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_document_uploads",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_email_outbox",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_employee_history",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_employees",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_holidays",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_leave_allocations",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_leave_requests",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_notice_deliveries",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_payroll_concepts",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_payroll_entries",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_payroll_runs",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_settings",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_signed_documents",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_vacation_accumulations",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_vacation_ledger",
+                                                      "rls":  true
+                                                  },
+                                                  {
+                                                      "authenticated_delete":  false,
+                                                      "authenticated_insert":  false,
+                                                      "authenticated_update":  false,
+                                                      "name":  "hr_vacation_minimums",
+                                                      "rls":  true
+                                                  }
+                                              ]
+                               },
+                "backupDatabaseRun":  "44827716879",
+                "backupStorageRun":  "43731317743",
+                "restorationProof":  "Historical run 42292324814; no fresh restore or real Storage transfer initiated"
+            },
+    "smoke":  {
+                  "at":  "2026-11-20T22:27:31.004Z",
+                  "base":  "https://sari.forwarders.app",
+                  "checks":  [
+                                 "Production tenant login page renders actual login form",
+                                 "HR routes and existing purchase orders require a session on the public tenant domain",
+                                 "Private certificate, signed-document and payslip HTTP endpoints reject anonymous access",
+                                 "Unauthenticated notification/upload requests perform no mutations or email delivery",
+                                 "Production HR cron rejects requests without its secret",
+                                 "Production login JavaScript/CSS assets load successfully"
+                             ],
+                  "results":  [
+                                  {
+                                      "path":  "/login",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "text/html; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/rrhh",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/mi-ficha",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fmi-ficha",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/calendario",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fcalendario",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/avisos",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Favisos",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/documentos",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fdocumentos",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/nomina",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fnomina",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/configuracion",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fconfiguracion",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/accounting/purchase-orders",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Faccounting%2Fpurchase-orders",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/api/hr/certificates/00000000-0000-4000-8000-000000000000",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/documents/00000000-0000-4000-8000-000000000000",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/payslips/00000000-0000-4000-8000-000000000000",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/notify",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/documents",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/cron/hr-notifications",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0.xtav0x13692.css",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "text/css; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/15tr4vw2bshy2.css",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "text/css; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0-hrh_uw98wb_.js",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "application/javascript; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0ozgduxlukvqo.js",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "application/javascript; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0aqpm5mabssqz.js",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "application/javascript; charset=utf-8"
+                                  }
+                              ],
+                  "authenticatedProductionUat":  false,
+                  "externalTestEmailsSent":  0,
+                  "syntheticProductionRecordsCreated":  0
+              },
+    "cron":  {
+                 "project":  "sarierp",
+                 "crons":  {
+                               "enabledAt":  1785440798222,
+                               "disabledAt":  null,
+                               "updatedAt":  1795213550687,
+                               "deploymentId":  "dpl_ZSSpD3qCFCb1vZbJj9wjwdjgFGRq",
+                               "definitions":  [
+                                                   {
+                                                       "host":  "sarierp-iha65uohw-claudherhn-5641s-projects.vercel.app",
+                                                       "path":  "/api/cron/accounting-alerts",
+                                                       "schedule":  "0 12 * * *"
+                                                   },
+                                                   {
+                                                       "host":  "sarierp-iha65uohw-claudherhn-5641s-projects.vercel.app",
+                                                       "path":  "/api/cron/hr-notifications",
+                                                       "schedule":  "15 12 * * *"
+                                                   }
+                                               ]
+                           }
+             },
+    "schedulerPositiveAuthentication":  "Not verified manually: sensitive Production secrets are intentionally not readable via CLI; no rotation or weakening performed. Registration and anonymous rejection verified.",
+    "backup":  {
+                   "databaseRun":  "44827716879",
+                   "databaseResult":  "success; encrypted archive uploaded and verified before HR SQL",
+                   "storageRun":  "43731317743",
+                   "storageResult":  "last full Storage snapshot, independently verified by health run 44779216460",
+                   "freshStorageTransferStarted":  false,
+                   "freshRestorePerformed":  false,
+                   "lastRestoreRun":  "42292324814",
+                   "healthRun":  "44827887541",
+                   "healthResult":  "Database freshness and Storage freshness jobs both succeeded after pre-release DB backup"
+               },
+    "cleanup":  {
+                    "localUatServicesStopped":  true,
+                    "syntheticDatabaseDropped":  true,
+                    "syntheticStorageVolumeRemoved":  true,
+                    "syntheticCredentialsRemoved":  true,
+                    "browserProfileRemoved":  true,
+                    "originalReplica":  {
+                                            "environment":  "demo",
+                                            "lastMigration":  "20261105120000",
+                                            "hrTables":  0,
+                                            "uatDatabaseExists":  false
+                                        },
+                    "userEnvLocalModified":  false,
+                    "unrelatedRootEditsPreserved":  true
+                },
+    "operationalPending":  [
+                               "Create real employee records and user links; configure schedules, holidays, advance policy and reviewed opening balances",
+                               "Enter real salary terms, currencies, frequencies, concepts and tenant account mappings",
+                               "Validate statutory amounts and settlement eligibility with payroll owner; no automatic legal compliance or bank disbursement claimed",
+                               "Verify first authorized email receipt and run authenticated Production UAT",
+                               "Reconcile and approve the first real payroll before posting"
+                           ]
+}

@@ -11,7 +11,7 @@ import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTreasuryAccounts } from '@/src/hooks/useTreasuryAccounts'
 import { TreasuryAccountField } from '@/src/components/accounting/TreasuryAccountField'
-import { NumberInput } from '@/src/components/ui/NumberInput'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, CheckCircle2, Send, DollarSign, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
@@ -993,19 +993,19 @@ export default function InvoiceDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <TreasuryAccountField {...treasury} currency={invoice.currency} value={bankAccount} onChange={setBankAccount}/>
-            {!!treasury.accounts.length&&invoice.currency==='USD'&&<label className="flex min-w-0 flex-col gap-1.5 text-xs"><span className={fieldLabelClass}>Tasa HNL por USD del cobro</span><NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
+            {!!treasury.accounts.length&&invoice.currency==='USD'&&<label className="flex min-w-0 flex-col gap-1.5 text-xs"><span className={fieldLabelClass}>Tasa HNL por USD del cobro</span><NumberInput numericKind="exchange" value={bankRate} min="0.000001" step="0.000001"  onChange={e=>setBankRate(e.target.value)}/></label>}
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Monto ({invoice.currency}) <span className="text-red-500">*</span>
               </label>
-              <NumberInput type="number"
+              <NumberInput numericKind="money" type="number"
                 value={payAmount}
                 onChange={(e) => setPayAmount(e.target.value)}
                 placeholder={`Ej. ${invoice.total.toFixed(2)}`}
                 min="0"
                 max={Math.max(0, pending)}
                 step="0.01"
-                className={fieldClass}
+
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -1097,7 +1097,7 @@ export default function InvoiceDetailPage() {
                   {SPLIT_METHODS.map((method) => {
                     const split = paySplits[method.value]
                     return (
-                      <div key={method.value} className="grid items-center gap-2 sm:grid-cols-[120px_1fr_1.4fr]">
+                      <div key={method.value} className="finance-field-row items-center gap-2 ">
                         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                           <input
                             type="checkbox"
@@ -1114,7 +1114,7 @@ export default function InvoiceDetailPage() {
                           />
                           {method.label}
                         </label>
-                        <NumberInput type="number"
+                        <NumberInput numericKind="money" type="number"
                           aria-label={`Monto ${method.label}`}
                           min="0"
                           step="0.01"
@@ -1125,7 +1125,7 @@ export default function InvoiceDetailPage() {
                             [method.value]: { ...current[method.value], amount: e.target.value },
                           }))}
                           placeholder="Monto"
-                          className={`${fieldClass} disabled:opacity-50`}
+
                         />
                         <input
                           value={split.reference}

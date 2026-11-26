@@ -6,12 +6,13 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { OperationDialogContent } from '@/src/components/operations/OperationDialog'
+import { operationDangerSolidButtonClass, operationPrimaryButtonClass, operationSecondaryButtonClass } from '@/src/components/operations/OperationsWorkspace'
 import {
   cardClass,
   fieldClass,
@@ -153,8 +154,8 @@ function emptyForm(booking: ScheduleBooking): ScheduleForm {
 function changedFields(booking: ScheduleBooking, form: ScheduleForm) {
   const changes: string[] = []
   if (form.carrier !== (booking.carrier || '')) changes.push('Carrier')
-  if (form.bookingNumber !== (booking.booking_number || '')) changes.push('Booking number')
-  if (form.carrierBooking !== (booking.carrier_booking || '')) changes.push('Carrier booking')
+  if (form.bookingNumber !== (booking.booking_number || '')) changes.push('Número de booking')
+  if (form.carrierBooking !== (booking.carrier_booking || '')) changes.push('Referencia de la naviera')
   if (form.vesselName !== (booking.vessel_name || '')) changes.push('Vessel')
   if (form.voyage !== (booking.voyage || '')) changes.push('Voyage')
   if (form.etd !== (booking.etd || '')) changes.push('ETD')
@@ -168,11 +169,14 @@ export function BookingScheduleManager({
   userRole,
   onChanged,
   onReplaced,
+  onReferenceConfirmed,
 }: {
   booking: ScheduleBooking
   userRole?: string | null
   onChanged: () => Promise<void>
   onReplaced: (newBookingId: string) => void
+  /** Tras confirmar la referencia, la pantalla puede confirmar el booking. */
+  onReferenceConfirmed?: () => Promise<void>
 }) {
   const [revisions, setRevisions] = useState<ScheduleRevision[]>([])
   const [userNames, setUserNames] = useState<Record<string, string>>({})
@@ -374,7 +378,8 @@ export function BookingScheduleManager({
       return
     }
 
-    await onChanged()
+    if (action === 'confirm' && onReferenceConfirmed) await onReferenceConfirmed()
+    else await onChanged()
     await loadHistory()
   }
 
@@ -408,7 +413,7 @@ export function BookingScheduleManager({
               <button
                 type="button"
                 onClick={() => openAction('revise')}
-                className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Revisar itinerario
               </button>
@@ -454,9 +459,9 @@ export function BookingScheduleManager({
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ['Carrier', booking.carrier || '—'],
+            ['Naviera', booking.carrier || '—'],
             ['Booking', booking.booking_number || booking.carrier_booking || '—'],
-            ['Vessel / Voyage', [booking.vessel_name, booking.voyage].filter(Boolean).join(' / ') || '—'],
+            ['Buque / viaje', [booking.vessel_name, booking.voyage].filter(Boolean).join(' / ') || '—'],
             ['Ruta', booking.routing_summary || '—'],
             ['ETD original', formatDate(booking.original_etd)],
             ['ETD vigente', formatDate(booking.etd)],
@@ -549,7 +554,7 @@ export function BookingScheduleManager({
       </section>
 
       <Dialog open={Boolean(action)} onOpenChange={(open) => !open && closeAction()}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <OperationDialogContent size="xl" icon={action === 'cancel' ? XCircle : action === 'rollover' ? RotateCcw : CalendarClock} tone={action === 'cancel' ? 'red' : action === 'admin' ? 'amber' : 'sky'} eyebrow={`Itinerario · ${booking.booking_number || booking.carrier_booking || 'Booking'}`}>
           <DialogHeader>
             <DialogTitle>{action ? actionTitles[action] : ''}</DialogTitle>
             <DialogDescription>
@@ -569,7 +574,7 @@ export function BookingScheduleManager({
             <div className="grid gap-4 md:grid-cols-2">
               {action !== 'confirm' && (
                 <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-                  <span className={fieldLabelClass}>Carrier</span>
+                  <span className={fieldLabelClass}>Naviera</span>
                   <input
                     value={form.carrier}
                     onChange={(event) => setForm({ ...form, carrier: event.target.value })}
@@ -581,7 +586,7 @@ export function BookingScheduleManager({
               {(action === 'confirm' || action === 'replace' || action === 'admin') && (
                 <>
                   <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-                    <span className={fieldLabelClass}>Booking number</span>
+                    <span className={fieldLabelClass}>Número de booking</span>
                     <input
                       value={form.bookingNumber}
                       onChange={(event) => setForm({ ...form, bookingNumber: event.target.value })}
@@ -590,7 +595,7 @@ export function BookingScheduleManager({
                     />
                   </label>
                   <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-                    <span className={fieldLabelClass}>Carrier booking</span>
+                    <span className={fieldLabelClass}>Referencia de la naviera</span>
                     <input
                       value={form.carrierBooking}
                       onChange={(event) => setForm({ ...form, carrierBooking: event.target.value })}
@@ -603,7 +608,7 @@ export function BookingScheduleManager({
               {action !== 'confirm' && (
                 <>
                   <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-                    <span className={fieldLabelClass}>Vessel</span>
+                    <span className={fieldLabelClass}>Buque</span>
                     <input
                       value={form.vesselName}
                       onChange={(event) => setForm({ ...form, vesselName: event.target.value })}
@@ -611,7 +616,7 @@ export function BookingScheduleManager({
                     />
                   </label>
                   <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
-                    <span className={fieldLabelClass}>Voyage</span>
+                    <span className={fieldLabelClass}>Viaje</span>
                     <input
                       value={form.voyage}
                       onChange={(event) => setForm({ ...form, voyage: event.target.value })}
@@ -729,7 +734,7 @@ export function BookingScheduleManager({
               type="button"
               onClick={closeAction}
               disabled={submitting}
-              className={secondaryButtonClass}
+              className={operationSecondaryButtonClass}
             >
               Cerrar
             </button>
@@ -737,16 +742,14 @@ export function BookingScheduleManager({
               type="button"
               onClick={submit}
               disabled={submitting}
-              className={`inline-flex items-center rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
-                action === 'cancel' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+              className={action === 'cancel' ? operationDangerSolidButtonClass : operationPrimaryButtonClass}
             >
-              {action === 'rollover' && <RotateCcw className="mr-2 h-4 w-4" />}
-              {action === 'cancel' && <XCircle className="mr-2 h-4 w-4" />}
+              {action === 'rollover' && <RotateCcw aria-hidden="true" className="h-4 w-4" />}
+              {action === 'cancel' && <XCircle aria-hidden="true" className="h-4 w-4" />}
               {submitting ? 'Procesando...' : 'Confirmar'}
             </button>
           </DialogFooter>
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
     </>
   )

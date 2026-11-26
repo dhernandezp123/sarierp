@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { SidePanel } from '@/src/components/ui/side-panel'
+import { OperationQuickView } from '@/src/components/operations/OperationQuickView'
 import Link from 'next/link'
 import {
   AlertTriangle,
@@ -13,9 +15,13 @@ import {
   PackageOpen,
   RefreshCw,
   Search,
+  Radar,
   Ship,
+  type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
+import { OperationFilterMetric } from '@/src/components/operations/OperationsWorkspace'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import {
   aggregateBookingStatus,
@@ -26,6 +32,7 @@ import {
   type BookingOperationalState,
 } from '@/src/lib/booking-operational-state'
 import { formatDate } from '@/src/lib/format'
+import { effectiveRemainingFreeDays } from '@/src/lib/booking-transit'
 import {
   buildOperationsControlTower,
   filterOperationsControlTower,
@@ -220,7 +227,9 @@ function getFreeDaysDisplay(booking: BookingRow) {
     Boolean(booking.actual_eta) ||
     isArrived(booking.shipment_status) ||
     isFinalStatus(booking.shipment_status)
-  const remaining = Number(booking.remaining_free_days)
+  // Calculado desde el arribo real; null no se trata como 0 días.
+  const remainingValue = effectiveRemainingFreeDays(booking)
+  const remaining = remainingValue === null ? Number.NaN : Number(remainingValue)
   const hasExpiringValue =
     Number.isFinite(remaining) && remaining >= 0 && remaining <= 7
 
@@ -383,6 +392,9 @@ export default function OperationsDashboardPage() {
   const [queueFilter, setQueueFilter] = useState<OperationsQueueFilter>('all')
   const [queueSearch, setQueueSearch] = useState('')
   const [urlStateReady, setUrlStateReady] = useState(false)
+  // Vista rápida: el booking abierto vive en la URL (?preview=) para que Atrás la cierre.
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const previewPushed = useRef(false)
 
   const loadDashboard = async () => {
     setLoading(true)
@@ -516,6 +528,7 @@ export default function OperationsDashboardPage() {
       const initial = initialOperationsQueueState()
       setQueueFilter(initial.filter)
       setQueueSearch(initial.search)
+      setPreviewId(new URLSearchParams(window.location.search).get('preview'))
       setUrlStateReady(true)
     }, 0)
     return () => window.clearTimeout(timeout)
@@ -526,9 +539,37 @@ export default function OperationsDashboardPage() {
     window.history.replaceState(
       null,
       '',
-      `${operationsDashboardHref(queueFilter, queueSearch)}${window.location.hash}`
+      `${dashboardUrl(queueFilter, queueSearch, new URLSearchParams(window.location.search).get('preview'))}${window.location.hash}`
     )
   }, [queueFilter, queueSearch, urlStateReady])
+
+  useEffect(() => {
+    const syncPreview = () => {
+      previewPushed.current = false
+      setPreviewId(new URLSearchParams(window.location.search).get('preview'))
+    }
+    window.addEventListener('popstate', syncPreview)
+    return () => window.removeEventListener('popstate', syncPreview)
+  }, [])
+
+  const openPreview = (bookingId: string) => {
+    const url = dashboardUrl(queueFilter, queueSearch, bookingId)
+    if (previewId) window.history.replaceState(null, '', url)
+    else {
+      window.history.pushState(null, '', url)
+      previewPushed.current = true
+    }
+    setPreviewId(bookingId)
+  }
+  const closePreview = () => {
+    setPreviewId(null)
+    if (previewPushed.current) {
+      previewPushed.current = false
+      window.history.back()
+    } else {
+      window.history.replaceState(null, '', dashboardUrl(queueFilter, queueSearch, null))
+    }
+  }
 
   const dashboard = useMemo(() => {
     const readinessByBookingId = new Map(
@@ -695,7 +736,7 @@ export default function OperationsDashboardPage() {
           etd: booking.actual_etd || booking.etd,
           eta: booking.eta,
           actualEta: booking.actual_eta,
-          remainingFreeDays: booking.remaining_free_days,
+          remainingFreeDays: effectiveRemainingFreeDays(booking),
           createdAt: booking.created_at,
           updatedAt: booking.updated_at,
           lastEvent: lastEvent
@@ -795,18 +836,16 @@ export default function OperationsDashboardPage() {
     )
   }
 
+  const previewItem = previewId ? dashboard.controlTower.find((entry) => entry.id === previewId) || null : null
+  const previewBooking = previewId ? bookings.find((entry) => entry.id === previewId) || null : null
+  const previewReadiness = previewBooking ? readinessOverview.find((entry) => entry.booking_id === previewBooking.id) || null : null
+  const previewReturnTo = dashboardUrl(queueFilter, queueSearch, previewId)
+  const previewQuotation = previewBooking ? resolveJoin(resolveJoin(previewBooking.shipping_instruction)?.quotation || null) : null
+
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <OperationsDashboardHeader />
-        <button
-          type="button"
-          onClick={() => void loadDashboard()}
-          className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
-        >
-          <RefreshCw aria-hidden="true" className="h-4 w-4" />
-          Actualizar
-        </button>
+      <div className="mb-6">
+        <OperationsDashboardHeader onRefresh={() => void loadDashboard()} />
       </div>
 
       <OperationsControlTower
@@ -816,62 +855,103 @@ export default function OperationsDashboardPage() {
         search={queueSearch}
         onFilterChange={setQueueFilter}
         onSearchChange={setQueueSearch}
+        onPreview={(item) => openPreview(item.id)}
       />
+
+      <SidePanel
+        open={Boolean(previewId)}
+        onClose={closePreview}
+        size="lg"
+        eyebrow="Control Tower · Vista rápida"
+        title={previewItem?.bookingLabel || 'Operación'}
+        description={previewItem ? `${previewItem.routingNumber} · ${previewItem.clientName}` : undefined}
+      >
+        {previewItem && previewBooking ? (
+          <OperationQuickView
+            item={previewItem}
+            state={operationalStateFor(previewBooking, previewReadiness)}
+            readiness={previewReadiness}
+            actionHref={operationsWorkHref(previewItem, previewReturnTo)}
+            bookingHref={`/operations/shipping-instructions/${previewItem.shippingInstructionId}/bookings/${previewItem.id}?returnTo=${encodeURIComponent(previewReturnTo)}`}
+            siHref={`/operations/shipping-instructions/${previewItem.shippingInstructionId}?returnTo=${encodeURIComponent(previewReturnTo)}`}
+            booking={{
+              carrier: previewBooking.carrier,
+              vessel_name: previewBooking.vessel_name,
+              voyage: previewBooking.voyage,
+              etd: previewBooking.etd,
+              eta: previewBooking.eta,
+              actual_etd: previewBooking.actual_etd,
+              actual_eta: previewBooking.actual_eta,
+              free_days: previewBooking.free_days,
+              remaining_free_days: effectiveRemainingFreeDays(previewBooking),
+              origin: previewQuotation?.origen || null,
+              destination: previewQuotation?.destino || null,
+              containers: previewBooking.booking_containers || [],
+              documents: previewBooking.booking_documents || [],
+              bills: previewBooking.bills_of_lading || [],
+            }}
+          />
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Esta operación ya no está en la cola activa. Actualiza el tablero o búscala en Bookings.
+          </p>
+        )}
+      </SidePanel>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-9">
         <MetricCard
           title="Bookings activos"
           value={dashboard.metrics.activeBookings}
-          icon={<ClipboardList className="h-5 w-5" />}
+          icon={ClipboardList}
         />
         <MetricCard
           title="Bookings en tránsito"
           value={dashboard.metrics.inTransitBookings}
-          icon={<Ship className="h-5 w-5" />}
+          icon={Ship}
         />
         <MetricCard
           title="Arribados este mes"
           value={dashboard.metrics.arrivedThisMonth}
-          icon={<CheckCircle2 className="h-5 w-5" />}
+          icon={CheckCircle2}
         />
         <MetricCard
           title="SI abiertos"
           value={dashboard.metrics.openRoutings}
-          icon={<CalendarDays className="h-5 w-5" />}
+          icon={CalendarDays}
         />
         <MetricCard
           title="Bookings con documentos pendientes"
           value={dashboard.metrics.pendingDocuments}
-          icon={<FileWarning className="h-5 w-5" />}
+          icon={FileWarning}
           danger={dashboard.metrics.pendingDocuments > 0}
         />
         <MetricCard
           title="Bookings no listos"
           value={dashboard.metrics.notReady}
-          icon={<AlertTriangle className="h-5 w-5" />}
+          icon={AlertTriangle}
           danger={dashboard.metrics.notReady > 0}
         />
         <MetricCard
           title="Sin asignar"
           value={dashboard.metrics.unassigned}
-          icon={<AlertTriangle className="h-5 w-5" />}
+          icon={AlertTriangle}
           danger={dashboard.metrics.unassigned > 0}
         />
         <MetricCard
           title="Estados por conciliar"
           value={dashboard.metrics.statusDrifts}
-          icon={<RefreshCw className="h-5 w-5" />}
+          icon={RefreshCw}
           danger={dashboard.metrics.statusDrifts > 0}
         />
         <MetricCard
           title="Cut-offs vencidos"
           value={dashboard.metrics.overdueCutoffs}
-          icon={<Clock3 className="h-5 w-5" />}
+          icon={Clock3}
           danger={dashboard.metrics.overdueCutoffs > 0}
         />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
         <EtaTable bookings={dashboard.etaCritical} />
         <FreeDaysTable bookings={dashboard.freeDaysExpiring} />
         <PendingConfirmationTable bookings={dashboard.pendingConfirmation} />
@@ -886,6 +966,12 @@ export default function OperationsDashboardPage() {
       </div>
     </div>
   )
+}
+
+function dashboardUrl(filter: OperationsQueueFilter, search: string, preview: string | null) {
+  const href = operationsDashboardHref(filter, search)
+  if (!preview) return href
+  return `${href}${href.includes('?') ? '&' : '?'}preview=${encodeURIComponent(preview)}`
 }
 
 function operationsWorkHref(item: OperationsWorkItem, returnTo: string) {
@@ -918,7 +1004,9 @@ function OperationsControlTower({
   search,
   onFilterChange,
   onSearchChange,
+  onPreview,
 }: {
+  onPreview: (item: OperationsWorkItem) => void
   items: OperationsWorkItem[]
   totalItems: number
   filter: OperationsQueueFilter
@@ -934,7 +1022,7 @@ function OperationsControlTower({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700 dark:bg-blue-950/60 dark:text-blue-200">
+            <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-[#B3282D] dark:bg-rose-950/40 dark:text-rose-200">
               Cola priorizada
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -942,7 +1030,7 @@ function OperationsControlTower({
             </span>
           </div>
           <h2 className="mt-3 text-xl font-bold text-slate-900 dark:text-white">
-            Control Tower
+            Qué atender primero
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Riesgo, aging y siguiente acción en una sola cola operativa.
@@ -966,9 +1054,10 @@ function OperationsControlTower({
             key={option.value}
             type="button"
             onClick={() => onFilterChange(option.value)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+            aria-pressed={filter === option.value}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 ${
               filter === option.value
-                ? 'border-blue-600 bg-blue-600 text-white'
+                ? 'border-[#B3282D] bg-rose-50 text-[#B3282D] dark:border-rose-400 dark:bg-rose-950/40 dark:text-rose-200'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
             }`}
           >
@@ -990,10 +1079,12 @@ function OperationsControlTower({
         ) : (
           <div className="mt-3 grid gap-3 lg:grid-cols-3">
             {nextActions.map((item, index) => (
-              <Link
+              <button
+                type="button"
                 key={item.id}
-                href={operationsWorkHref(item, returnTo)}
-                className={`group rounded-xl border p-4 transition hover:-translate-y-0.5 hover:shadow-md ${
+                onClick={() => onPreview(item)}
+                aria-label={`Vista rápida de ${item.bookingLabel}: ${item.reason}`}
+                className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
                   item.level === 'immediate'
                     ? 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20'
                     : item.level === 'pending'
@@ -1019,7 +1110,7 @@ function OperationsControlTower({
                 <p className="mt-2 text-xs font-semibold text-blue-700 dark:text-blue-300">
                   {item.nextAction}
                 </p>
-              </Link>
+              </button>
             ))}
           </div>
         )}
@@ -1053,7 +1144,14 @@ function OperationsControlTower({
                     </span>
                   </td>
                   <td className="pr-4">
-                    <p className="font-semibold text-slate-900 dark:text-white">{item.bookingLabel}</p>
+                    <button
+                      type="button"
+                      onClick={() => onPreview(item)}
+                      title="Vista rápida"
+                      className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-[#B3282D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:text-white dark:decoration-slate-600"
+                    >
+                      {item.bookingLabel}
+                    </button>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {item.routingNumber} · {item.clientName}
                     </p>
@@ -1087,20 +1185,20 @@ function OperationsControlTower({
   )
 }
 
-function OperationsDashboardHeader() {
+function OperationsDashboardHeader({ onRefresh }: { onRefresh?: () => void }) {
   return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-        Centro de control
-      </p>
-      <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-        Dashboard Operativo
-      </h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Seguimiento diario de bookings, ETAs, free days, documentos y
-        contenedores.
-      </p>
-    </div>
+    <FinancePageHeader
+      eyebrow="Operaciones"
+      icon={Radar}
+      title="Control Tower"
+      description="Seguimiento diario de bookings, ETAs, días libres, documentos y contenedores."
+      actions={onRefresh ? (
+        <button type="button" onClick={onRefresh} className={financeActionClass}>
+          <RefreshCw aria-hidden="true" className="h-4 w-4" />
+          Actualizar
+        </button>
+      ) : undefined}
+    />
   )
 }
 
@@ -1112,34 +1210,10 @@ function MetricCard({
 }: {
   title: string
   value: number
-  icon: React.ReactNode
+  icon: LucideIcon
   danger?: boolean
 }) {
-  return (
-    <div
-      className={`rounded-2xl border p-5 shadow-sm ${
-        danger
-          ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30'
-          : 'border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
-        <div
-          className={`rounded-xl p-2 ${
-            danger
-              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
-              : 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-200'
-          }`}
-        >
-          {icon}
-        </div>
-      </div>
-      <p className="mt-3 text-3xl font-bold text-slate-900 dark:text-white">
-        {value}
-      </p>
-    </div>
-  )
+  return <OperationFilterMetric label={title} value={value} icon={icon} tone={danger ? 'amber' : 'slate'} />
 }
 
 function DashboardPanel({
@@ -1152,7 +1226,7 @@ function DashboardPanel({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+    <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] sm:p-6">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
           {title}
@@ -1161,7 +1235,7 @@ function DashboardPanel({
           {description}
         </p>
       </div>
-      <div className="overflow-x-auto">{children}</div>
+      <div className="relative overflow-x-auto">{children}</div>
     </section>
   )
 }

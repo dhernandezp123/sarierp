@@ -1,5 +1,6 @@
 'use client'
 
+import { FinanceNumericCodeInput } from '@/src/components/ui/FinanceNumberInput'
 import { fiscalDocumentCodes } from '@/src/lib/fiscal-offices'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -389,7 +390,7 @@ export default function CaiSettingsPage() {
         <section ref={formRef} id="new-cai-range" className="w-full max-w-3xl scroll-mt-24 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/40">
           <div className="mb-5 border-l-4 border-orange-500 pl-3"><p className="text-[10px] font-bold uppercase tracking-widest text-orange-700 dark:text-orange-300">Configuración fiscal</p><h2 className="mt-1 text-base font-semibold text-slate-900 dark:text-white">{editing?'Corregir rango CAI':'Nuevo rango CAI'}</h2></div>
           {editing&&<p className="mb-4 text-sm text-slate-500">Corrige según la autorización del SAR. Una renovación con otro CAI se registra por separado. Los documentos emitidos se conservan; un CAI usado mantiene su identidad, inicio de rango y siguiente correlativo.</p>}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="finance-field-row gap-4 ">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Tipo de documento fiscal <span className="text-red-500">*</span>
@@ -464,9 +465,9 @@ export default function CaiSettingsPage() {
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Siguiente correlativo (opcional)
               </label>
-              <input aria-label="Siguiente correlativo" inputMode="numeric" value={form.next_number}
+              <FinanceNumericCodeInput aria-label="Siguiente correlativo"  value={form.next_number}
                 onChange={(event) => setForm(previous => ({ ...previous, next_number: event.target.value }))}
-                placeholder="Inicio del rango si se deja vacío" className={fieldClass} />
+                placeholder="Inicio del rango si se deja vacío"  />
               <p className="mt-1 text-xs text-slate-500">Si la oficina ya utilizó parte del rango, indica el próximo número disponible.</p>
             </div>}
             <div>

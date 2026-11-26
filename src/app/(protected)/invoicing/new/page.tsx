@@ -5,7 +5,7 @@ import { InvoiceLineSettings, InvoiceLineSettingsProvider } from '@/src/componen
 import { calculateInvoiceFiscal, convertMoney, invoiceLineAmounts, type TaxTreatment } from '@/src/lib/invoice-fiscal'
 
 import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
-import { NumberInput } from '@/src/components/ui/NumberInput'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 
@@ -32,6 +32,11 @@ import { draftEditorFromInvoice, draftEditorSignature, draftInvoicePayload, draf
 import { fiscalAccountVariant, type ServiceSourceKind } from '@/src/lib/service-accounting'
 import { InvoiceCorrectionReview } from '@/src/components/invoicing/InvoiceCorrectionReview'
 import { useInvoiceMaster } from '@/src/hooks/useInvoiceMaster'
+import { useInvoiceCourtesies } from '@/src/hooks/useInvoiceCourtesies'
+import { courtesyExclusions, courtesyLineKey } from '@/src/lib/invoice-courtesies'
+import { InvoiceCourtesyList } from '@/src/components/invoicing/InvoiceCourtesyList'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
+import { FormField } from '@/src/components/ui/form-field'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -220,6 +225,8 @@ export default function NewInvoicePage() {
   const [motivo, setMotivo] = useState('')
   const [items, setItems] = useState<InvoiceItem[]>([newItem()])
   const [itemPendingRemoval, setItemPendingRemoval] = useState<InvoiceItem | null>(null)
+  const [courtesyItem, setCourtesyItem] = useState<InvoiceItem | null>(null), [courtesyReason, setCourtesyReason] = useState('')
+  const courtesies = useInvoiceCourtesies(draft?.source_invoice_id || correctionSource ? undefined : draft?.id, draft?.revision || 0, context)
   const [quotationChangePending, setQuotationChangePending] = useState<string | null>(null)
   const [loadingQuotation, setLoadingQuotation] = useState(false)
 
@@ -588,6 +595,10 @@ export default function NewInvoicePage() {
   }
 
   // Totals
+  const editorState: DraftEditorState = { invoiceType: 'Factura', clienteId, quotationId, issueDate, dueDate, currency, exchangeRate, notes, motivo, items, fiscalOptions, sourceCurrency }
+  const draftDirty = !draft || draftEditorSignature(draft.editor_state) !== draftEditorSignature(editorState)
+  const sourceInvoiceId = draft?.source_invoice_id || correctionSource || null
+  const courtesyKeys = courtesyExclusions(courtesies.rows, draft?.revision || 0, draftDirty)
   const isFiscal = IS_FISCAL[invoiceType]
   const conversionNeeded = Boolean(quotationId && sourceCurrency && sourceCurrency !== currency)
   const conversionValid = !conversionNeeded || (fiscalOptions.conversionEnabled && Number.isFinite(Number(fiscalOptions.conversionRate)) && Number(fiscalOptions.conversionRate) > 0 && Number(fiscalOptions.conversionRate) <= 1000000)
@@ -595,7 +606,7 @@ export default function NewInvoicePage() {
   let discountTotal = 0
   let amounts = calculateInvoiceFiscal([], fiscalOptions.mode)
   try {
-    const prepared = items.map(item => ({item,line:invoiceLineAmounts(Number(item.quantity),Number(item.unit_price),Number(item.discount_amount||0),conversionNeeded&&conversionValid?{currency,rate:Number(fiscalOptions.conversionRate),operation:fiscalOptions.conversionOperation}:undefined)}))
+    const prepared = items.filter(item => invoiceType !== 'Factura' || !courtesyKeys.has(courtesyLineKey(item))).map(item => ({item,line:invoiceLineAmounts(Number(item.quantity),Number(item.unit_price),Number(item.discount_amount||0),conversionNeeded&&conversionValid?{currency,rate:Number(fiscalOptions.conversionRate),operation:fiscalOptions.conversionOperation}:undefined)}))
     discountTotal=prepared.reduce((sum,{line})=>sum+line.discount,0)
     const displayItems=prepared.map(({item,line})=>({...item,amount:line.net}))
     amounts = calculateInvoiceFiscal(displayItems, fiscalOptions.mode)
@@ -613,10 +624,9 @@ export default function NewInvoicePage() {
   const paymentTerms = getClientPaymentTerms(selectedCliente)
 
   const formReady = loadedContext === context && !draftLoading && !draftError
-  const editorState: DraftEditorState = { invoiceType: 'Factura', clienteId, quotationId, issueDate, dueDate, currency, exchangeRate, notes, motivo, items, fiscalOptions, sourceCurrency }
-  const draftDirty = !draft || draftEditorSignature(draft.editor_state) !== draftEditorSignature(editorState)
-  const sourceInvoiceId = draft?.source_invoice_id || correctionSource || null
+  if (invoiceType === 'Factura' && draft && !sourceInvoiceId && (courtesies.loading || courtesies.error)) fiscalError = courtesies.error || 'Espera la consulta de cortesías antes de emitir.'
   async function persistDraft() {
+    // Conservar la revision aprobada cuando el editor no cambio.
     if (draft && !draftDirty) return draft
     const invoice = draftInvoicePayload(editorState, fiscalOptionsPayload({ ...fiscalOptions, conversionEnabled: conversionNeeded && fiscalOptions.conversionEnabled }, sourceCurrency), pointOfSale)
     const args = { p_id: draft?.id || draftIdentity.current, p_revision: draft?.revision || 0, p_invoice: invoice,
@@ -629,6 +639,19 @@ export default function NewInvoicePage() {
     const saved = result.data as InvoiceDraft
     draftIdentity.current = saved.id; setDraft(saved)
     return saved
+  }
+  async function requestCourtesy() {
+    if (!courtesyItem || saving || saveLock.current || courtesyReason.trim().length < 5) return
+    const currentContext = context
+    saveLock.current = context; setSaving(true)
+    try {
+      const saved = await persistDraft()
+      if (!saved || owner.current !== currentContext) return
+      const { error } = await supabase.rpc('request_invoice_courtesy', { p_draft_id: saved.id, p_revision: saved.revision, p_line_key: courtesyLineKey(courtesyItem), p_reason: courtesyReason.trim() })
+      if (error) throw error
+      if (owner.current === currentContext) { setCourtesyItem(null); setCourtesyReason(''); courtesies.reload(); toast.success('Cortesía solicitada. Se aplicará únicamente después de su aprobación.') }
+    } catch (error) { if (owner.current === currentContext) toast.error((error as Error).message || 'No se pudo solicitar la cortesía.') }
+    finally { if (saveLock.current === currentContext) saveLock.current = ''; if (owner.current === currentContext) setSaving(false) }
   }
   async function handleSaveDraft() {
     if (!formReady || saving || saveLock.current === context || invoiceType !== 'Factura') return
@@ -666,6 +689,10 @@ export default function NewInvoicePage() {
       && parentInvoice
       && total > parentInvoice.balance + 0.005) {
       toast.error('La nota de crédito no puede superar el saldo pendiente de la factura')
+      return
+    }
+    if (!IS_NOTE[invoiceType] && dueDate && dueDate < issueDate) {
+      toast.error('El vencimiento no puede ser anterior a la fecha de emisión')
       return
     }
     if (!IS_NOTE[invoiceType] && paymentTerms.condition === 'Credito' && paymentTerms.creditDays <= 0) {
@@ -813,6 +840,7 @@ export default function NewInvoicePage() {
       {draftError && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{draftError}</p>}
       {invoiceType === 'Factura' && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-rose-50/60 p-4 text-sm text-slate-700 dark:border-rose-900 dark:bg-rose-950/20 dark:text-slate-300"><div><p className="font-semibold">Prepara y confirma antes de emitir</p><p className="mt-1 text-xs">Puedes guardar información incompleta como borrador. El CAI, el correlativo y el saldo se asignan al emitir.</p></div><Link href="/invoicing/drafts" className="font-semibold text-[#B3282D] underline dark:text-rose-300">Ver borradores y correcciones</Link>{quotationId && selectedQuotation && <button type="button" disabled={saving || loadingQuotation} className={secondaryButtonClass} onClick={() => void applyQuotation(selectedQuotation)}>Volver a cargar líneas de cotización</button>}</div>}
       {draft?.source_invoice_id && <InvoiceCorrectionReview draft={draft} dirty={draftDirty} onChanged={setDraft} />}
+      {invoiceType === 'Factura' && !sourceInvoiceId && <InvoiceCourtesyList rows={courtesies.rows} loading={courtesies.loading} error={courtesies.error} dirty={draftDirty} reload={courtesies.reload} />}
 
       {/* Alert: no CAI activo para documentos fiscales */}
       {isFiscal&&pointOfSale&&!canIssueFromOffice&&<p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">No tienes autorización de emisión para {pointOfSale}. El usuario máster puede habilitar esta oficina en Configuración contable. Puedes guardar el documento como borrador mientras se confirma el permiso.</p>}
@@ -846,7 +874,7 @@ export default function NewInvoicePage() {
         <div className="min-w-0 space-y-6 xl:col-span-2">
           <section className={cardClass}>
             <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Datos generales</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="finance-field-row gap-4 ">
               {/* Tipo (bloqueado si viene de NC/ND parent) */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
@@ -969,14 +997,17 @@ export default function NewInvoicePage() {
               {!isNote && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Fecha de vencimiento ({paymentTerms.condition === 'Credito' ? `Crédito · ${paymentTerms.creditDays} días` : 'Contado'})
+                    Fecha de vencimiento (plazo del cliente: {paymentTerms.condition === 'Credito' ? `Crédito · ${paymentTerms.creditDays} días` : 'Contado'})
                   </label>
                   <input
                     type="date"
                     value={dueDate}
-                    readOnly
-                    className={`${fieldClass} bg-slate-50 dark:bg-slate-800`}
+                    min={issueDate || undefined}
+                    onChange={e => setDueDate(e.target.value)}
+                    disabled={saving}
+                    className={fieldClass}
                   />
+                  <p className="mt-1 text-xs text-slate-500">Puedes ajustar el vencimiento de este documento sin cambiar las condiciones del cliente.</p>
                 </div>
               )}
 
@@ -1004,12 +1035,12 @@ export default function NewInvoicePage() {
                     {isFiscal && <span className="ml-1 text-red-500">*</span>}
                     {isFiscal && <span className="ml-1 text-xs font-normal text-slate-400">— SAR exige total en HNL</span>}
                   </label>
-                  <NumberInput type="number"
+                  <NumberInput numericKind="exchange" invalid={Boolean(submitted && isFiscal && (!exchangeRate || parseFloat(exchangeRate) <= 0))} type="number"
                     value={exchangeRate}
                     onChange={(e) => setExchangeRate(e.target.value)}
                     min="1"
                     step="0.0001"
-                    className={`${fieldClass} ${submitted && isFiscal && (!exchangeRate || parseFloat(exchangeRate) <= 0) ? 'border-red-400' : ''}`}
+
                   />
                 </div>
               )}
@@ -1137,36 +1168,37 @@ export default function NewInvoicePage() {
                   />
                   </label>
                   <label className="flex min-w-0 flex-col gap-1.5 min-w-0 text-xs"><span className={fieldLabelClass}>Cantidad</span>
-                  <NumberInput type="number"
+                  <NumberInput numericKind="quantity" type="number"
                     value={it.quantity}
                     onChange={(e) => updateItem(it.id, 'quantity', e.target.value)}
                     min="0"
                     step="1"
                     readOnly={Boolean(it.source_pricing_item_id)}
-                    className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
+
                   />
                   </label>
                   <label className="flex min-w-0 flex-col gap-1.5 min-w-0 text-xs"><span className={fieldLabelClass}>Precio unitario {currency}</span>
-                  <NumberInput type="number"
+                  <NumberInput numericKind="money" type="number"
                     value={it.unit_price}
                     onChange={(e) => updateItem(it.id, 'unit_price', e.target.value)}
                     min="0"
                     step="0.01"
                     readOnly={Boolean(it.source_pricing_item_id)}
-                    className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
+
                   />
                   </label>
                   <div className="space-y-1">
                     <label className="flex gap-1 text-xs"><input type="checkbox" aria-label="Línea gravable" checked={it.isv_rate > 0 && fiscalOptions.mode !== 'Exonerada' && fiscalOptions.mode !== 'Exenta'} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} onChange={e => { updateItem(it.id, 'isv_rate', e.target.checked ? 15 : 0); updateItem(it.id, 'tax_treatment', e.target.checked ? 'Gravada' : 'Exenta') }} />Gravable</label>
-                    <select aria-label="Tasa ISV de línea" value={it.isv_rate} onChange={e => updateItem(it.id, 'isv_rate', Number(e.target.value))} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} className={fieldClass}>
-                      <option value={15}>15%</option><option value={18}>18%</option><option value={0}>Sin ISV</option>
-                    </select>
-                    {it.isv_rate === 0 && <select aria-label="Motivo sin ISV" className={fieldClass} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} value={it.tax_treatment || 'Exenta'} onChange={e=>updateItem(it.id,'tax_treatment',e.target.value)}><option value="Exenta">Exenta</option><option value="Exonerada">Exonerada</option></select>}
+                    {it.isv_rate > 0 && !['Exenta','Exonerada'].includes(fiscalOptions.mode) && <select aria-label="Tasa ISV de línea" value={it.isv_rate} onChange={e => updateItem(it.id, 'isv_rate', Number(e.target.value))} disabled={Boolean(it.source_pricing_item_id)} className={fieldClass}>
+                      <option value={15}>15%</option><option value={18}>18%</option>
+                    </select>}
+                    {(it.isv_rate === 0 || ['Exenta','Exonerada'].includes(fiscalOptions.mode)) && <select aria-label="Motivo sin ISV" className={fieldClass} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} value={['Exenta','Exonerada'].includes(fiscalOptions.mode)?fiscalOptions.mode:it.tax_treatment || 'Exenta'} onChange={e=>updateItem(it.id,'tax_treatment',e.target.value)}><option value="Exenta">Exenta</option><option value="Exonerada">Exonerada</option></select>}
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-sm font-medium dark:border-slate-700 dark:bg-slate-800 dark:text-white">
                     <span className="mb-1 block text-[10px] font-normal text-slate-500 lg:hidden">Importe neto</span>
                     {it.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </div>
+                  {invoiceType === 'Factura' && !sourceInvoiceId && <button type="button" title="Solicitar cortesía de esta línea" aria-label={`Solicitar cortesía de ${it.description || 'línea'}`} className="col-span-full justify-self-start text-xs font-semibold text-[#B3282D] underline dark:text-rose-300" disabled={saving || Number(it.unit_price) <= 0 || courtesyKeys.has(courtesyLineKey(it))} onClick={() => { setCourtesyItem(it); setCourtesyReason('') }}>{courtesyKeys.has(courtesyLineKey(it)) ? 'Cortesía aprobada · excluida del total' : 'Solicitar cortesía'}</button>}
                   {it.source_pricing_item_id ? (
                     <span
                       title="Línea vinculada a la cotización"
@@ -1185,12 +1217,11 @@ export default function NewInvoicePage() {
                     </button>
                   )}
                   <label className="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">Descuento de esta línea {conversionNeeded?sourceCurrency:currency}
-                    <NumberInput type="number" aria-label="Descuento de línea" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
+                    <NumberInput numericKind="money" type="number" aria-label="Descuento de línea" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} />
                     <span>Se aplica antes del ISV.</span>
                   </label>
                   <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} disabled={saving} readonlyService={Boolean(it.source_pricing_item_id)} reference={it.service_catalog_kind&&it.service_catalog_code?{kind:it.service_catalog_kind,code:it.service_catalog_code}:undefined} source={{rateCode:it.source_rate_code,itemType:it.source_item_type,product:it.source_product}} variant={fiscalAccountVariant(['Exenta','Exonerada'].includes(fiscalOptions.mode)?fiscalOptions.mode:it.tax_treatment,it.isv_rate)} onClearService={()=>setItems(previous=>previous.map(item=>item.id===it.id?{...item,service_catalog_kind:undefined,service_catalog_code:undefined}:item))} onService={service => {
-                    const variant = service.tax_variant || (service.taxable ? 'I' : 'E')
-                    setItems(previous=>previous.map(item=>item.id===it.id?{...item,description:service.label,isv_rate:variant==='I'?15:0,tax_treatment:variant==='I'?'Gravada':variant==='E'?'Exenta':'Exonerada',income_account_id:'',service_catalog_kind:service.kind,service_catalog_code:service.code}:item))
+                    setItems(previous=>previous.map(item=>item.id===it.id?{...item,description:service.label,income_account_id:service.income_account_id || '',service_catalog_kind:service.kind,service_catalog_code:service.code}:item))
                   }}/>
                 </div>
               ))}
@@ -1337,6 +1368,7 @@ export default function NewInvoicePage() {
           setItemPendingRemoval(null)
         }}
       />
+      <Dialog open={Boolean(courtesyItem)} onOpenChange={open => { if (!open && !saving) setCourtesyItem(null) }}><DialogContent><DialogHeader><DialogTitle>Solicitar cortesía de una línea</DialogTitle><DialogDescription>Se guardará esta versión del borrador. Otra persona autorizada deberá revisar el concepto y el motivo antes de excluirlo de la factura.</DialogDescription></DialogHeader><p className="text-sm font-semibold">{courtesyItem?.description}</p><FormField label="Motivo de la cortesía" required><textarea aria-label="Motivo de la cortesía" className={`${fieldClass} min-h-28`} maxLength={1000} disabled={saving} value={courtesyReason} onChange={event => setCourtesyReason(event.target.value)} /></FormField><div className="flex justify-end gap-2"><button type="button" className={secondaryButtonClass} disabled={saving} onClick={() => setCourtesyItem(null)}>Cancelar</button><button type="button" className={primaryButtonClass} disabled={saving || courtesyReason.trim().length < 5} onClick={() => void requestCourtesy()}>{saving ? 'Registrando…' : 'Solicitar aprobación'}</button></div></DialogContent></Dialog>
     </div>
   )
 }

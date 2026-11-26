@@ -9,7 +9,7 @@ type NumberInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'va
 }
 
 /** Keep the text being edited while a numeric parent normalizes its value. */
-export function NumberInput({ value, onChange, onBlur, ref, ...props }: NumberInputProps) {
+export function NumberInput({ value, onChange, onBlur, onWheel, ref, ...props }: NumberInputProps) {
   const [draft, setDraft] = useState<{ text: string; source: string } | null>(null)
   const incoming = String(value ?? '')
   const matchesDraft = draft && (incoming === draft.source || incoming === draft.text
@@ -21,6 +21,13 @@ export function NumberInput({ value, onChange, onBlur, ref, ...props }: NumberIn
     ref={ref}
     type="number"
     value={value === undefined ? undefined : display}
+    onWheel={event => {
+      // Release focus before the browser steps the number; keep page scrolling native.
+      if (event.currentTarget.ownerDocument.activeElement === event.currentTarget) {
+        event.currentTarget.blur()
+      }
+      onWheel?.(event)
+    }}
     onChange={event => {
       if (value !== undefined) setDraft({ text: event.target.value, source: incoming })
       onChange?.(event)

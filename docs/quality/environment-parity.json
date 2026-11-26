@@ -1,5 +1,5 @@
 {
-  "reviewed_against": "8bf64c3ca3e129069a61afbd496db5f648d5004c",
+  "reviewed_against": "1819a343351b61067340ade7eda5d05ddcbe97a7",
   "variants": {
     "src/app/api/admin/invite/route.ts": {
       "reason": "Outbound invitations blocked",
@@ -28,8 +28,8 @@
     },
     "src/components/pdf/FiscalDocumentLayout.tsx": {
       "reason": "Sandbox watermark on every PDF page",
-      "source_sha256": "f9f004e8cbab52a4559d34ca5803045578db9dc97353dee941558854cdd9c1ac",
-      "trial_sha256": "675873573eb1e574fcd45c5842b94181b2227b27d56e196d58fdff5774462273"
+      "source_sha256": "feb5514c42eac72dd4a06ff775a770f47c702e068d18ada5d97f990ecb4b8e9e",
+      "trial_sha256": "32e2b4981602204a0626dfeea342d47a72b2923c44ce633646a048b69147c325"
     },
     "src/components/pdf/arrival-notice-pdf.tsx": {
       "reason": "Sandbox watermark on every PDF page",
@@ -68,8 +68,8 @@
     },
     "src/components/pdf/quotation-pdf.tsx": {
       "reason": "Sandbox watermark on every PDF page",
-      "source_sha256": "1d6cd646cfa86ae16b67009c55b6930d7c5c884bdb5533660aa0fceff0199581",
-      "trial_sha256": "f0ec2c0e85ed535f8538088b42a23950103955c4eeced68a63e57a94ecd150f3"
+      "source_sha256": "b956e4f697cd51ccb458674747717e0be17384c50298a4e65963c41f0e44be69",
+      "trial_sha256": "a595c49c35bda3ae6b1a60382be29d03992ec452590e7eacc1453d4eb37c361b"
     },
     "src/components/pdf/recibo-pago-pdf.tsx": {
       "reason": "Sandbox watermark on every PDF page",
@@ -98,8 +98,8 @@
     },
     "src/proxy.ts": {
       "reason": "Sandbox hostname mapping, noindex, registration/recovery and private assets blocked",
-      "source_sha256": "9d6ba03ec650f4d3fe6c459954926ad67c0199237902f3090d2f70f8247e1560",
-      "trial_sha256": "233b1a847e4887332b7a9f0ba406021874459aca008fefa4620bea4f923d2388"
+      "source_sha256": "6ec033a15b28ca7ce4b159ffe6bd52220d2d3671285cf14b5d2a48d52788d023",
+      "trial_sha256": "1c35a5777196bf180f42e8e6fb1b60e3ece1e2f1b1233cfc0c2ca3367329216b"
     },
     "src/types/index.ts": {
       "reason": "Temporary-access profile metadata",
@@ -123,13 +123,18 @@
     },
     "src/app/(protected)/invoicing/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
-      "source_sha256": "ed94f381f6f8011898bfe26513113d0bb20e12f4f6b96d7a0f443b5ce975ed77",
-      "trial_sha256": "696e66c7d45ad92ff559faf4fdc828861502643d89b75e21c3f3e977d7ef3528"
+      "source_sha256": "642f60a237758b528984e13582b4297b9b7ca6505dd9fb45d14e30a443f98cc3",
+      "trial_sha256": "13f969fbf7af9bf74ceba44546cfe3ed460f83d3b90b0ea99bf48276e847663e"
     },
     "src/app/(protected)/miami/embarques/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
       "source_sha256": "fa41b9ccc37bd4eb222306998fac6f6374669d142ece02fada611790ff30f846",
       "trial_sha256": "75e0e23896128bc946dc2d785b11c9755d8f5f6a762563ab86942661425ea186"
+    },
+    "src/app/api/hr/documents/route.ts": {
+      "reason": "Block service-role HR document uploads in sandbox, preserving private Storage boundary",
+      "source_sha256": "953c91d43066445820cd76c844f330b7ca014fb4d9c0a26352b716026b3d933f",
+      "trial_sha256": "d1cd65bd1ad5d9c96de55a4ef8a00d9351ddccf0015c4ca75093eca5947c81d8"
     }
   },
   "trial_only_source": [

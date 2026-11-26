@@ -31,7 +31,7 @@ export function draftInvoicePayload(state: DraftEditorState, fiscal: Record<stri
   }
 }
 export function draftItemPayload(items: DraftEditorItem[]) {
-  return items.map((item, sort_order) => ({ description: item.description.trim(), quantity: Number(item.quantity) || 0,
+  return items.map((item, sort_order) => ({ source_editor_item_id: item.id, description: item.description.trim(), quantity: Number(item.quantity) || 0,
     unit_price: Number(item.unit_price) || 0, discount_amount: Number(item.discount_amount || 0), isv_rate: item.isv_rate,
     tax_treatment: item.tax_treatment, income_account_id: item.income_account_id || null, service_catalog_kind:item.service_catalog_kind||null,service_catalog_code:item.service_catalog_code||null, sort_order }))
 }

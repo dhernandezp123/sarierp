@@ -1,0 +1,266 @@
+{
+    "date":  "2026-11-23",
+    "status":  "Published to Production; real payroll reconciliation pending",
+    "pullRequest":  "https://github.com/dhernandezp123/sarierp/pull/2",
+    "candidate":  "ef74cad647e13add84623387846035fc64fad539",
+    "publishedCommit":  "58809cc534357ea55958ea0b219980fa28de0e5d",
+    "tree":  "3042727c283acf087008ff833430df3f06ab315e",
+    "ci":  {
+               "prRun":  45225517480,
+               "prApplication":  "success",
+               "prDatabase":  "success",
+               "mainRun":  45226448976,
+               "mainResult":  "success",
+               "nodeTests":  693
+           },
+    "deployment":  {
+                       "id":  "dpl_4g3x2i28MFusDCg1E516aQQC4nth",
+                       "state":  "READY",
+                       "url":  "sarierp-bwoc7ja04-claudherhn-5641s-projects.vercel.app",
+                       "target":  "production",
+                       "commit":  "58809cc534357ea55958ea0b219980fa28de0e5d",
+                       "aliases":  [
+                                       "forwarders.app",
+                                       "sarierp.vercel.app",
+                                       "sari.forwarders.app",
+                                       "sarierp-claudherhn-5641s-projects.vercel.app",
+                                       "sarierp-git-main-claudherhn-5641s-projects.vercel.app"
+                                   ],
+                       "createdAt":  1795454383320
+                   },
+    "sql":  {
+                "migration":  {
+                                  "sha256":  "8651529ee04e7c0384922b743214559f5e51bb19baa87b0be7b5c67ec4f5291f",
+                                  "version":  "20261123120000"
+                              },
+                "environment":  "production",
+                "countsUnchanged":  true,
+                "coreFunctionsUnchanged":  true,
+                "tables":  [
+                               {
+                                   "delete":  false,
+                                   "insert":  false,
+                                   "name":  "hr_benefit_calculations",
+                                   "rls":  true,
+                                   "update":  false
+                               },
+                               {
+                                   "delete":  false,
+                                   "insert":  false,
+                                   "name":  "hr_benefit_credits",
+                                   "rls":  true,
+                                   "update":  false
+                               }
+                           ],
+                "rpc":  [
+                            {
+                                "anon":  false,
+                                "authenticated":  false,
+                                "name":  "hr_compute_benefits_internal"
+                            },
+                            {
+                                "anon":  false,
+                                "authenticated":  true,
+                                "name":  "hr_create_benefit_payroll"
+                            },
+                            {
+                                "anon":  false,
+                                "authenticated":  true,
+                                "name":  "hr_preview_benefits"
+                            },
+                            {
+                                "anon":  false,
+                                "authenticated":  true,
+                                "name":  "hr_record_benefit_credit"
+                            },
+                            {
+                                "anon":  false,
+                                "authenticated":  true,
+                                "name":  "hr_void_benefit_credit"
+                            }
+                        ],
+                "backupExisting":  45043407446,
+                "backupHealth":  45089079626,
+                "newBackupExportStarted":  false
+            },
+    "smoke":  {
+                  "at":  "2026-11-23T17:22:04.126Z",
+                  "base":  "https://sari.forwarders.app",
+                  "checks":  [
+                                 "Production tenant login page renders actual login form",
+                                 "HR routes and existing purchase orders require a session on the public tenant domain",
+                                 "Private certificate, signed-document and payslip HTTP endpoints reject anonymous access",
+                                 "Unauthenticated notification/upload requests perform no mutations or email delivery",
+                                 "Production HR cron rejects requests without its secret",
+                                 "Production login JavaScript/CSS assets load successfully"
+                             ],
+                  "results":  [
+                                  {
+                                      "path":  "/login",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "text/html; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/rrhh/calculos",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fcalculos",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/mi-ficha",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fmi-ficha",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/calendario",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fcalendario",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/avisos",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Favisos",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/documentos",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fdocumentos",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/nomina",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fnomina",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/rrhh/configuracion",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Frrhh%2Fconfiguracion",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/accounting/purchase-orders",
+                                      "status":  307,
+                                      "location":  "/login?next=%2Faccounting%2Fpurchase-orders",
+                                      "contentType":  "text/plain"
+                                  },
+                                  {
+                                      "path":  "/api/hr/benefits/00000000-0000-4000-8000-000000000000",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/certificates/00000000-0000-4000-8000-000000000000",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/documents/00000000-0000-4000-8000-000000000000",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/payslips/00000000-0000-4000-8000-000000000000",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/notify",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/hr/documents",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/api/cron/hr-notifications",
+                                      "status":  401,
+                                      "location":  null,
+                                      "contentType":  "application/json"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0.xtav0x13692.css",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "text/css; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/15tr4vw2bshy2.css",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "text/css; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0-hrh_uw98wb_.js",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "application/javascript; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0ozgduxlukvqo.js",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "application/javascript; charset=utf-8"
+                                  },
+                                  {
+                                      "path":  "/_next/static/chunks/0aqpm5mabssqz.js",
+                                      "status":  200,
+                                      "location":  null,
+                                      "contentType":  "application/javascript; charset=utf-8"
+                                  }
+                              ],
+                  "authenticatedProductionUat":  false,
+                  "externalTestEmailsSent":  0,
+                  "syntheticProductionRecordsCreated":  0
+              },
+    "backup":  {
+                   "databaseExistingRun":  45043407446,
+                   "storageExistingRun":  45043407446,
+                   "healthRun":  45089079626,
+                   "existingComponentsVerified":  true,
+                   "newBackupExportStarted":  false,
+                   "newRestoreExecuted":  false
+               },
+    "privacy":  {
+                    "privateRowsExported":  false,
+                    "privateRowHashesExported":  false,
+                    "realEmployeeMutations":  0,
+                    "syntheticProductionRecords":  0,
+                    "externalTestEmails":  0
+                },
+    "unrelatedWork":  {
+                          "rootBranch":  "feat/hr-module",
+                          "rootEditsPreserved":  true,
+                          "alreadyPublishedClientAndPurchasingChangesNotReapplied":  true
+                      },
+    "trial":  {
+                  "synchronized":  false,
+                  "parityWasAlreadyFailingOnBaseRun":  44830194024,
+                  "releaseParityRun":  45226449153,
+                  "productionQualityIndependent":  true
+              },
+    "pending":  [
+                    "Enter and reconcile real compensation terms, concepts/accounts, earnings evidence, worked days and previous payments",
+                    "Validate and reconcile first authorized real calculation before approval/posting",
+                    "Authenticated real-business Production UAT; local synthetic Auth/PostgREST UAT is separately documented"
+                ]
+}

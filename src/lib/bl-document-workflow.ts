@@ -123,11 +123,11 @@ const CONSISTENCY_LABELS: Record<BlConsistencyField, string> = {
   consignee_address: 'Dirección del consignee',
   notify_party: 'Notify Party',
   notify_party_address: 'Dirección del Notify Party',
-  place_of_receipt: 'Place of Receipt',
-  port_of_loading: 'Port of Loading',
-  port_of_discharge: 'Port of Discharge',
-  place_of_delivery: 'Place of Delivery',
-  carrier: 'Carrier',
+  place_of_receipt: 'Lugar de recepción',
+  port_of_loading: 'Puerto de carga',
+  port_of_discharge: 'Puerto de descarga',
+  place_of_delivery: 'Lugar de entrega',
+  carrier: 'Naviera',
   vessel_name: 'Buque',
   voyage: 'Viaje',
   etd: 'ETD',
@@ -137,8 +137,8 @@ const CONSISTENCY_LABELS: Record<BlConsistencyField, string> = {
   package_type: 'Tipo de bulto',
   gross_weight_kg: 'Peso bruto',
   measurement_cbm: 'Volumen CBM',
-  freight_terms: 'Freight Terms',
-  release_type: 'Release Type',
+  freight_terms: 'Términos de flete',
+  release_type: 'Tipo de liberación',
 }
 
 const SHARED_OPERATIONAL_FIELDS: BlConsistencyField[] = [
@@ -410,7 +410,7 @@ export function getBlReadiness(
     { field: 'consignee', label: 'Consignee' },
     { field: 'port_of_loading', label: 'Puerto/lugar de carga' },
     { field: 'port_of_discharge', label: 'Puerto/lugar de descarga' },
-    { field: 'carrier', label: 'Carrier' },
+    { field: 'carrier', label: 'Naviera' },
     { field: 'description_of_goods', label: 'Descripción de mercancía' },
     { field: 'gross_weight_kg', label: 'Peso bruto' },
   ]
@@ -436,7 +436,8 @@ export function getBlReadiness(
     required.push({ field: 'draft_file_url', label: 'Draft MBL del agente' })
   }
 
-  if (form.bl_type === 'HBL' && nextStatus === 'Pendiente Aprobación Cliente') {
+  // La aprobación puede registrarse directo desde el draft (UX-OPS-04).
+  if (form.bl_type === 'HBL' && ['Pendiente Aprobación Cliente', 'Aprobado por Cliente'].includes(nextStatus)) {
     required.push({ field: 'parent_bl_id', label: 'MBL padre validado' })
     warnings.push({ field: 'consignee_email', label: 'Email del consignee' })
   }

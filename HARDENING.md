@@ -1287,6 +1287,1566 @@
   - No se reinició el dataset, no se rotaron cuentas y no se enviaron correos.
 - Commit: `ada18dd` (`feat(demo): sync ERP workflows and preserve sandbox guards`).
 
+### 23/11/2026 - FLOW-BL-SOURCE-01 - Ceros no informados en fuentes de carga del MBL
+
+- Estado: implementado y validado localmente; pendiente migracion y publicacion. UAT autenticada pendiente.
+- Hallazgo: el MBL de una cotizacion FCL con peso/volumen/bultos cotizados en cero y sin quotation_cargo_lines recibe BL_SOURCE_REVIEW_REQUIRED aunque contiene su carga real. buildQuotationCargoDefaults omite esos ceros, pero get_unresolved_bl_source_differences los trataba como valores informados. La UI no mostraba diferencias que el servidor exigia justificar.
+- Cambio: supabase/migrations/20261123210000_bl_missing_quotation_cargo_sources.sql reemplaza solo el comparador para tratar los tres fallbacks finales en cero de la cotizacion como fuente ausente. Mantiene fuentes positivas, comparacion HBL contra MBL, excepciones exactas y requisitos de validacion documental; conserva los valores reales del BL y de la cotizacion. Sin cambios de permisos/RLS/frontend.
+- Archivos: migracion indicada; supabase/tests/bl_missing_quotation_cargo_sources.sql; scripts/validate-audit-sql.mjs; HARDENING.md.
+- Validaciones: reproduccion local falla con funcion anterior; regresion SQL corregida OK con ROLLBACK en supabase_db_sarierp_gerencia20261104. Admin valida MBL con fuentes en cero conservando carga; fuentes positivas y HBL discrepantes siguen bloqueados; justificaciones exactas resuelven diferencias y se invalidan al cambiar la fuente; fallback positivo gross_weight sigue activo; BL sin peso positivo sigue bloqueado. TypeScript OK. Ensayo Production con ROLLBACK OK: las tres diferencias falsas desaparecen; MBL/cotizacion/excepciones y privilegios intactos. Quality pendiente.
+- Pendiente: ensayo con rollback y aplicacion acotada en Production, huellas de documento/cotizacion/excepciones y permisos antes/despues; luego reintentar Validar en la sesion real de Admin. No modificar ni validar automaticamente el documento real. Commit pendiente.
+
+
+### 23/11/2026 - FLOW-BL-RETURNING-01 - Creacion MBL/HBL con respuesta del documento
+
+- Estado: correccion preparada y validada localmente; pendiente aplicar migracion y UAT autenticada en Production.
+- Hallazgo confirmado: Admin activo/aprobado recibe 42501 al guardar MBL. El editor ejecuta insert().select('id, bl_number').single(); la policy SELECT bills_of_lading_select_policy llama can_access_bill_of_lading(id), cuyo SELECT STABLE sobre la misma tabla no ve la nueva fila en el snapshot de la sentencia INSERT ... RETURNING. Reproduccion local del error exacto antes del cambio.
+- Cambio: supabase/migrations/20261123200000_bl_insert_returning_rls.sql altera solamente esa policy SELECT para evaluar can_manage_operations() y tenant_id=current_tenant_id() sobre la fila. Conserva Admin/Operaciones aprobados y activos, tenant_isolation_guard restrictivo, permisos SQL, triggers de pertenencia/hierarquia, numeracion HBL y proteccion de documentos emitidos. Sin cambios en frontend ni datos reales.
+- Archivos: migracion indicada; supabase/tests/bl_insert_returning_rls.sql; scripts/validate-audit-sql.mjs; HARDENING.md.
+- Validacion SQL: regresion local en supabase_db_sarierp_gerencia20261104 con ROLLBACK. Admin y Operaciones crean MBL y HBL con INSERT RETURNING id,bl_number; HBL conserva correlativo y requiere MBL padre. Ventas/Pricing/Contabilidad/Cliente, Admin inactivo/pendiente, otro tenant y anonimo no pueden crear; lectura aislada por rol/tenant. TypeScript del release OK; CI pendiente.
+- Pendiente: aplicar solo esta migracion, verificar policy/permisos y huellas antes/despues, y probar guardado con sesion real de Admin. Commit pendiente; no crear documentos reales de prueba.
+
+
+### 23/11/2026 - FLOW-ADMIN-BOOKING-01 - Admin completa el expediente hasta Booking
+
+- Estado: implementado y validado localmente; pendiente aplicar migracion, publicar frontend y UAT autenticada en Production. Sin cambios en datos reales ni Demo/Trial.
+- Hallazgo: SARIHN-2609-0267-AP / RT0033 fue creada por Admin y permanecia sin sales_submitted_at ni aceptacion. La UI y las RPC reservaban el envio a Ventas propietaria y la aceptacion a Operaciones, dejando a Admin sin forma de habilitar Validar SI y Crear Booking aunque el proveedor estaba completo.
+- Cambio: Admin puede enviar expedientes propios o ajenos pendientes, incluso asignados, y aceptar explicitamente con el boton Aceptar y asumir expediente. La aceptacion mantiene responsable, aceptante y shipment sincronizados y registra el responsable anterior y la intervencion de Admin. El selector conserva visible al responsable Admin. Validar SI y Crear Booking reutilizan sus RPC existentes.
+- Archivos: src/app/(protected)/operations/shipping-instructions/[id]/page.tsx; src/lib/shipping-instruction-state.ts; tests/admin-shipping-handoff.test.mjs; supabase/tests/admin_shipping_instruction_handoff.sql; scripts/validate-audit-sql.mjs; HARDENING.md.
+- SQL: supabase/migrations/20261123190000_admin_shipping_instruction_handoff.sql reemplaza save_shipping_instruction_sales_initial y accept_shipping_instruction_handoff. Conserva aprobacion/actividad, ownership para Ventas, asignacion para Operaciones, control de version, auditoria, bloqueos por cierre/cancelacion y agrega filtro explicito de tenant en ambas lecturas y actualizacion del shipment. No modifica politicas RLS ni funciones historicas.
+- Validaciones: 697/697 pruebas de Node OK en el release aislado sobre origin/main (692/692 en el checkout de desarrollo), incluidas ocho focales de acceso/estado; TypeScript, ESLint focal, check:finance-ui y build/postbuild OK. Regresion SQL final OK en supabase_db_sarierp_gerencia20261104 con migracion y fixtures dentro de una transaccion terminada en ROLLBACK: Admin creador y no creador, SI asignada, aceptacion, validacion y creacion efectiva de Booking; sincronizacion del shipment; rechazo de revision obsoleta, cancelacion, Ventas sin permiso, operativo ajeno, Admin inactivo y acceso/RPC de Admin de otro tenant.
+- Pendiente: validar botones en navegador con sesion real; aplicar unicamente esta migracion y desplegar frontend antes de intentar desbloquear RT0033. La prueba SQL local no modifica ni certifica Production. Ensayo de migracion en Production con ROLLBACK aprobado: ambiente, dominio, revision de funciones, ACL, search_path y huellas de cotizacion/SI intactos. Lint completo del release: 661 archivos, 213 diagnosticos historicos, cero regresiones. Commit pendiente; cambios concurrentes de clientes, compras y RRHH preservados.
+
+
+### 23/11/2026 - HR-RELEASE-02 - Publicación verificada de cálculos HR-10
+
+- Estado: HR-10 publicado en Production. PR [#2](https://github.com/dhernandezp123/sarierp/pull/2), candidato `ef74cad647e13add84623387846035fc64fad539`, integración `58809cc534357ea55958ea0b219980fa28de0e5d`; árbol revisado e integrado idéntico `3042727c283acf087008ff833430df3f06ab315e`. Las entradas inferiores conservan el estado histórico previo al despliegue.
+- Validación: Quality PR [45225517480](https://github.com/dhernandezp123/sarierp/actions/runs/45225517480), aplicación y base de datos exitosas; 693 tests, TypeScript, lint sin regresiones, estándar financiero, build/OCR. Ocho suites SQL HR/compras aprobadas localmente, UAT Auth/PostgREST real sintética y navegador/PDF según evidencia HR-10. Quality de main [45226448976](https://github.com/dhernandezp123/sarierp/actions/runs/45226448976) también exitoso en aplicación y base de datos.
+- SQL: aplicada únicamente `20261123120000_hr_automatic_benefits.sql`, después de ensayar el paquete revisado con ROLLBACK en destino. Guardias de Production/tenant/historial/hash HR-08 aprobadas. Fuente instalada SHA-256 coincide con el commit; dos tablas nuevas con RLS y sin escrituras directas authenticated; RPC internas no concedidas al cliente y ninguna RPC nueva concedida a anon. Se conservaron conteos existentes y definiciones de seis RPC core de HR. No se consultaron/exportaron filas salariales ni sus huellas; no se crearon registros sintéticos ni se modificó personal real.
+- Despliegue: `dpl_4g3x2i28MFusDCg1E516aQQC4nth`, READY/Production, commit de integración y alias `sari.forwarders.app` comprobados con Vercel y estado del SHA en GitHub. Smoke público exitoso: login, nueve rutas protegidas incluidas calculadora/compras, cuatro endpoints privados incluidos detalle de prestaciones, rechazos de mutaciones sin sesión/cron y recursos estáticos. Sin correos de prueba. No equivale a UAT de negocio autenticada en Production.
+- Respaldo: se verificó el existente de BD y Storage [45043407446](https://github.com/dhernandezp123/sarierp-backups/actions/runs/45043407446), ambos componentes exitosos, y salud independiente [45089079626](https://github.com/dhernandezp123/sarierp-backups/actions/runs/45089079626). No se inició nueva exportación de BD/Storage ni restore; no se presenta el respaldo existente como uno recién ejecutado.
+- Evidencia: `docs/uat/hr-benefit-production-release-2026-11-23.json`, política y runbook. Árbol raíz `feat/hr-module` y sus cambios concurrentes preservados; clientes/compras ya publicados no se reaplicaron. Trial no sincronizado: paridad ya fallaba en base [44830194024](https://github.com/dhernandezp123/sarierp/actions/runs/44830194024); [45226449153](https://github.com/dhernandezp123/sarierp/actions/runs/45226449153) continúa indicando diferencias, independiente de Quality Production.
+- Pendiente operativo: completar condiciones salariales, conceptos/cuentas, historial devengado/días efectivos y pagos previos reales; conciliar el primer cálculo antes de aprobar/contabilizar. `.env.local` intacto; Vercel reconstruyó desde fuente con variables de Production, sin reutilizar `.next` UAT. Hash del registro documental: commit que contiene esta entrada.
+
+### 20/11/2026 - HR-RELEASE-01 - Publicación verificada de HR-01 a HR-09
+
+- Estado: código y SQL publicados en Production; configuración con datos reales y UAT operativa autenticada pendientes. No se declara nómina legal automática ni conciliación de pagos bancarios.
+- Código: PR [#1](https://github.com/dhernandezp123/sarierp/pull/1), candidato `893c97fa00620a4bce5bb4d8b907b8198428fb3c`, integración `a3d13c44cbd639d1a1c943ac77557fa1e911485e`. Árbol validado e integrado idéntico: `2b06b89e63f945971e577207d3c6a1ed905b9e90`. Compras 0d2184a se conserva íntegro; cambios locales ajenos del árbol principal preservados.
+- Validación: 691 Node, TypeScript, ESLint/estándar financiero, build/postbuild OCR; siete suites SQL HR/compras locales en rollback. Quality PR [44827684587](https://github.com/dhernandezp123/sarierp/actions/runs/44827684587) y main [44828646626](https://github.com/dhernandezp123/sarierp/actions/runs/44828646626), ambos application/database exitosos.
+- SQL: aplicadas únicamente las seis versiones HR del runbook en una transacción con guardias. Hash SHA-256 de cada fuente instalada coincide con el manifiesto. Las 19 tablas HR tienen RLS y ninguna admite INSERT/UPDATE/DELETE directo de authenticated. Bucket privado PDF/PNG/JPEG de 10 MB y RPC sensibles solo service_role. No se cargaron empleados, nóminas ni documentos sintéticos a Production.
+- Despliegue: `dpl_ZSSpD3qCFCb1vZbJj9wjwdjgFGRq`, READY/Production y alias `sari.forwarders.app`; estado GitHub Vercel del SHA integrado apunta a ese ID. Smoke público: login, ocho rutas protegidas incluidas compras, tres endpoints privados, rechazos de mutaciones anónimas/cron y assets OK. Cron HR registrado `15 12 * * *`; aceptación/recepción real de correo y autenticación positiva del cron no se certifican con ese smoke.
+- Respaldo: BD previo [44827716879](https://github.com/dhernandezp123/sarierp-backups/actions/runs/44827716879), cifrado/subido/verificado, exitoso; Storage no se transfirió en ese job. Último snapshot Storage completo 43731317743 y restore histórico 42292324814. No se ejecutó restore nuevo ni transferencia nueva de documentos reales.
+- Evidencia: `docs/uat/hr-production-release-2026-11-20.json`, validación local de fases 3–5, política de nómina y runbook. Secretos de Vercel permanecen protegidos; el intento de comprobación local del cron no puede leerlos, por lo que no se rotaron ni debilitaron para probarlo.
+- Limpieza: retirados contenedores, volumen, base, credenciales y perfil Chrome sintéticos; servidores UAT detenidos. Réplica original conserva ambiente Demo, historial 20261105120000 y cero tablas HR persistidas. `.env.local` intacto. El `.next` local es UAT, no un artefacto de Production.
+- Pendiente operativo: fichas/vínculos reales, feriados/jornadas, saldos iniciales conciliados, contratos, conceptos/cuentas e importes legales revisados; primer aviso recibido y primera nómina real conciliada. Las entradas previas registran el estado anterior a esta publicación. Commit de evidencia: el que contiene este registro.
+
+### 20/11/2026 - HR-05 - Calendario, historial y exportaciones
+
+- Estado: implementado y validado localmente; migración, integración y UAT de Production pendientes.
+- Archivos: `HrCalendarPage`, `HrHistoryDialog`, `HrExportButtons`, `HrShared`, `EmployeesPage`, `LeaveRequestsPage`, `hr-report.ts`, rutas RRHH, permisos, sidebar y breadcrumbs. SQL: `20261120141000_hr_activity_and_calendar.sql`; suite `hr_activity_and_calendar.sql`.
+- Comportamiento: calendario de ausencias aprobadas, alcance propio para empleados y equipo del tenant para Admin; historial de ficha con antes/después, actor y revisión; Excel/CSV del filtro completo, sin motivos médicos y con protección contra fórmulas. Auditoría de creación consolidada únicamente dentro de su transacción, sin editar historia ya confirmada. Avisos internos idempotentes y transaccionales.
+- Validaciones: suite SQL con ROLLBACK, API real Auth/PostgREST y navegador real de producción local; calendario, exportación efectiva de Excel/CSV, historial legible y tamaños 1280/768/390. Detalle final en `docs/uat/hr-phases-3-5-validation-2026-11-20.json`.
+- Riesgos/pendientes: SQL y smoke autenticado en destino; no se certifica Production con pruebas locales. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-06 - Constancias y documentos firmados privados
+
+- Estado: implementado y validado localmente; migración y publicación pendientes.
+- Archivos: `HrDocumentsPage`, PDF `hr-certificate-pdf`, `hr-documents.ts`, `server/hr-access.ts`, `/api/hr/documents`, `/api/hr/documents/[id]`, `/api/hr/certificates/[id]`, ruta Constancias. SQL: `20261120151000_hr_certificates_and_private_documents.sql`; suite `hr_certificates_and_documents.sql`.
+- Comportamiento: snapshots inmutables de concesión/acumulación/suspensión con identidad real del tenant, firma manual y carga exclusiva Admin mediante servidor; bucket privado, permisos restrictivos de escritura, verificación de bytes/MIME/tamaño/hash, versiones sin sobrescritura, URL privada de 60 segundos y comprobación de tenant/Host. Reintento después de perder la respuesta conserva la misma versión.
+- Validaciones: SQL con ROLLBACK, Storage/Auth/PostgREST reales locales, 17 grupos HTTP y pruebas de navegador con respuesta perdida después del commit; PDF renderizado e inspeccionado visualmente. Archivos de prueba explícitamente sintéticos, sin firmas ni documentos reales.
+- Riesgos/pendientes: desplegar SQL, confirmar copias independientes de BD/Storage y ejecutar smoke en destino. Un PDF emitido no demuestra firma. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-07 - Correo de RRHH con cola y bloqueo de ambiente
+
+- Estado: implementado y validado localmente; activación en destino pendiente. Usuario eligió avisos por correo y firma manual con carga privada.
+- Archivos: `hr-email.ts`, `hr-notify.ts`, `server/hr-email.ts`, motor compartido `email-delivery.ts`, `/api/hr/notify`, `/api/cron/hr-notifications`, formularios de solicitud/revisión/cancelación, `HrNoticesPage`, `HrSettingsPage`, proxy y `vercel.json`. SQL: `20261120161000_hr_email_outbox.sql`; suite `hr_email_outbox.sql`.
+- Comportamiento: destinatario congelado por evento, validación de cuenta activa y correo sin cambios, opt-in por tenant, dominio primario propio, contenido mínimo sin razones médicas ni adjuntos. Reutiliza la entrega Resend con lease e idempotencia; sin reintentos ciegos de resultados inciertos. Demostración, ambiente no verificable o veto global bloquean envíos. UI distingue pendiente, aceptación por proveedor y conciliación; aceptación no equivale a entrega al buzón. Cron diario recoge primeros intentos pendientes.
+- Validaciones: SQL con ROLLBACK; tests de contenido y bloqueo antes de proveedor; siete grupos HTTP autenticados reales, incluidos acceso ajeno, origen, UUID y cron. Cero correos externos de prueba. Se verificó presencia de nombres de variables Production, sin extraer secretos.
+- Riesgos/pendientes: producción debe conservar `CRON_SECRET`, Resend y `OUTBOUND_EMAIL_ENABLED`; resultados inciertos o leases vencidos requieren conciliación con Resend, nunca se anuncian como enviados. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-08 - Nómina configurable, liquidaciones revisadas y contabilidad
+
+- Estado: implementación validada localmente con SQL/API/HTTP/navegador; migración, configuración real y despliegue pendientes. No se declara motor automático de cumplimiento laboral/fiscal.
+- Archivos: `HrPayrollPage`, `hr-payroll.ts`, PDF `hr-payslip-pdf`, `/rrhh/nomina`, `/api/hr/payslips/[id]`, permisos/navegación, `check-finance-ui.mjs` y `docs/hr-payroll-policy.md`. SQL: `20261120171000_hr_payroll.sql`; suite `hr_payroll.sql`.
+- Comportamiento: condiciones salariales por vigencia, HNL/USD, cuatro frecuencias, fijo/variable/mixto, conceptos y cuentas explícitas; snapshots, cálculo de totales servidor y soporte por concepto. Preparación, aprobación, contabilización y reversión atómicas/idempotentes. Cruces por empleado bloqueados mediante lock. Antes de contabilizar revalida las cuentas vigentes y bloquea la solicitud de vacaciones para confirmar su aprobación y fechas; cambios posteriores a aprobar nómina no generan un asiento parcial. Aportes patronales separados del neto; conversión USD con cuenta explícita de redondeo. Pago de vacaciones vinculado a aprobación y anticipo de tres días; liquidación requiere causal y conceptos revisados. PDF propio para empleado, sin acceso a salarios del equipo ni cuentas. No ejecuta transferencias bancarias.
+- Validaciones: siete suites SQL integradas HR/compras con ROLLBACK, diez grupos Auth/PostgREST reales y contabilización concurrente final, incluyendo concurrencia de creación/contabilización, cruce de períodos, publicación solo aprobada y asiento real balanceado. Campos numéricos usan `FinanceNumberInput` y se agregan al verificador financiero.
+- Riesgos/pendientes: completar contratos, cuentas y reglas/valores legales con responsable de nómina antes de emitir. No se inventan salarios, tasas ni exenciones; retenciones y prestaciones se capturan con cálculo revisado. Las correcciones posteriores de vacaciones pagadas requieren conciliación. La dispersión bancaria y automatización normativa tienen alcance propio. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-09 - Desmontar formularios privados al cambiar de sesión
+
+- Estado: implementado y validado localmente, publicación pendiente.
+- Archivos: `src/app/(protected)/rrhh/layout.tsx`.
+- Comportamiento: el layout HR usa una clave por usuario, tenant y permisos; cambiar ese contexto desmonta también modales y borradores privados, además de descartar cargas obsoletas. Así un formulario abierto no conserva datos del usuario anterior.
+- Validaciones: TypeScript/ESLint, build y cierre de un formulario salarial abierto al cerrar sesión desde otra pestaña real del navegador; evidencia final en el archivo de validación de fases 3–5.
+- Riesgos/pendientes: desplegar junto a las rutas HR; RLS y autorización servidor siguen siendo controles obligatorios. Commit: el que contiene este registro.
+### 20/11/2026 - FLOW-PURCHASE-ORDER-SLIP-01 - Boleta de Compra desde orden
+
+- Estado: validado para Production; migracion aplicada el 20/11/2026. UAT autenticada pendiente. Trial sin cambios.
+- Flujo: Registrar compra desde orden permite Factura de proveedor o Boleta de Compra. La factura conserva numero obligatorio y CAI opcional; la boleta oculta y descarta ambas referencias del proveedor y usa el correlativo/CAI vigente de nuestra oficina. Avisa que no respalda credito fiscal de ISV. Conserva importes aprobados, descuentos, cuenta por pagar, vinculo y cantidades parciales de la orden.
+- SQL: nueva migracion supabase/migrations/20261120140000_purchase_order_purchase_slips.sql reemplaza manage_purchase_workflow conservando autorizacion, tenant, revision, bloqueo, idempotencia, auditoria y allocations. Acepta solo los dos tipos; llamadas antiguas sin tipo siguen siendo factura. La boleta fuerza tax_credit=false y reutiliza create_purchase_document y la anulacion fiscal existentes; sin cambios de RLS.
+- Archivos: src/components/accounting/PurchaseWorkflowPage.tsx, tests/purchase-workflow.test.mjs, supabase/tests/purchase_requests_and_orders.sql, migracion indicada y HARDENING.md. Sin dependencias nuevas; cambios concurrentes de clientes y RRHH preservados.
+- Validaciones: TypeScript, ESLint focal y check:finance-ui OK; 11 pruebas focales de flujo/PDF OK. Suite SQL completa de ordenes ampliada OK en supabase_db_sarierp_gerencia20261104, cargando esquema de ordenes y migracion nueva dentro de una transaccion terminada con ROLLBACK. Incluye factura sin numero rechazada, tipo invalido, CAI ausente, boleta parcial/final, descuentos, cuenta por pagar, cero credito fiscal, reintento sin segundo correlativo, anulacion/liberacion de cantidades, permisos y aislamiento tenant.
+- Validacion final: suite general 688/688 OK; build Next.js y postbuild OCR OK; git diff --check OK.
+- Verificacion de release: TypeScript, lint focal, checker financiero y 11 pruebas focales OK sobre worktree aislado desde origin/main. Pagina real de ordenes y modal Radix revisados con sesion/datos sinteticos a 1280/768/390 px, sin overflow ni excepciones JS; boleta oculta y envia vacias las referencias fiscales del proveedor. Tailwind y tema reales, fuente Arial e iconos simulados. Evidencia privada ignorada: .ua/intermediate/purchase-order-slip/.
+- Production: preflight read-only confirma funcion origen esperada; ensayo de migracion con rollback OK, verificando ocho tablas (incluidos CAI), ACL/owner/search_path/security-definer intactos.
+- Release: commit funcional fb6076e0d75d234fdba3b9c224b9efeddc63941e; Quality 44822386559 success: 672/672 pruebas, TypeScript, checker financiero, lint (610 archivos, 213 diagnosticos existentes, cero regresiones), build/postbuild y todas las suites SQL/RLS OK.
+- Production: aplicacion atomica y postflight independiente OK; funcion coincide con dry-run y ocho huellas de datos, politicas RLS, ACL/owner/config/definer intactos. Sin compras reales ni consumo de CAI. Consulta read-only confirma rango vigente de boleta para la oficina de OC-000001. Evidencia final de deployment y smoke se guarda en .ua/intermediate/purchase-order-slip/ durante el cierre de publicacion.
+- Pendientes: UAT autenticada de Contabilidad. La oficina requiere rango CAI de Boleta de Compra vigente y permiso fiscal del usuario; no se inventa numeracion ni se omiten esos controles. Commit funcional: fb6076e0d75d234fdba3b9c224b9efeddc63941e.
+
+
+### 18/11/2026 - UX-CLIENT-RATE-SPARSE-01 - Guardar solo tarifas editadas y distinguir altas
+
+- Estado: implementado en release aislado desde origin/main; publicacion pendiente. No se eliminan tarifas ni eventos historicos y no se requiere migracion: reutiliza replace_client_rates con listas de codigos y filas limitadas a lo editado.
+- Causa confirmada en Production con consulta read-only: IMEXPO tenia un guardado inicial de 116 altas (111 en cero, 5 con importe), todas sin valor anterior. El formulario enviaba el catalogo entero; el historial lo llamaba modificaciones. El fix anterior de agrupacion no cubria este caso.
+- Guardado: compara con el snapshot cargado; sin cambios o al volver al importe original no llama la RPC. Solo reemplaza los codigos editados del destino seleccionado o globales correspondientes. Cero explicito se guarda; celda nueva vacia no crea una tarifa. Conserva notas, unidad, moneda y vigencias de tarifas existentes. Fallo de red libera el formulario y mantiene el subconjunto para reintentar.
+- Historial: diferencia altas, modificaciones y bajas. Las altas muestran cuantos importes son distintos de cero y cuantos son cero; no supone que los ceros historicos fueran editados o no. Los 116 registros de IMEXPO permanecen auditados sin presentarlos como 116 modificaciones.
+- Archivos: src/app/(protected)/clientes/[id]/page.tsx, src/components/clientes/ClientRateHistory.tsx, src/lib/client-rate-history.ts, tests/client-rate-access-history.test.mjs, tests/miami-rate-destination.test.mjs, tests/client-rate-sparse-save.test.mjs, supabase/tests/client_rate_sparse_save.sql, scripts/validate-audit-sql.mjs y HARDENING.md.
+- Validaciones: 17 pruebas focales OK; suite general 671/671 OK; TypeScript OK; suites SQL locales sparse/compact/access con rollback OK (IDs/notas/vigencias no tocados, SPS/TGU/globales, cero y no-op sin auditoria). Navegador con pagina real y fixture de 116 tarifas: cinco editadas -> cinco enviadas; sin cambios -> cero RPC; cero explicito, vaciar celda nueva, revertir importe y error/reintento OK. Historial sintetico de IMEXPO clasifica 116 altas y no modificaciones. Sin excepciones JS ni overflow a 1280/768/390; captura movil revisada. Tailwind real, fuente Arial e iconos simulados. Evidencia ignorada en .ua/intermediate/client-rate-sparse-evidence-20261118/.
+- Regresion antigua actualizada: test TGU esperaba reenviar un cargo global no tocado; ahora exige una sola fila TGU y cero codigos globales. Lint previo: 610 archivos, 213 diagnosticos historicos, cero regresiones; lint final/build de Quality pendientes.
+- Pendiente: Quality, publicacion Production y smoke. UAT autenticada pendiente; no escribir tarifas reales de prueba en IMEXPO. Demo/Trial fuera de este release. Commit pendiente.
+
+
+### 18/11/2026 - UX-CLIENT-RATE-HISTORY-01 - Historial compacto por guardado
+
+- Estado: implementado y validado localmente; migracion y publicacion en Production/Demo pendientes. Sin modificar importes ni eliminar auditoria.
+- UI: historial cerrado inicialmente con ultima actualizacion; ultimos cinco guardados al abrir; detalle antes/despues bajo demanda; dialogo completo con filtros de fecha (Honduras), usuario y tarifa y paginacion de guardados completos. Reinicia vistas al cambiar cliente, usuario o version y descarta respuestas obsoletas.
+- Archivos: src/components/clientes/ClientRateHistory.tsx, src/lib/client-rate-history.ts, tests/client-rate-access-history.test.mjs, scripts/validate-audit-sql.mjs, supabase/migrations/20261118130000_compact_client_rate_history.sql, supabase/tests/compact_client_rate_history.sql y HARDENING.md.
+- SQL: nueva RPC get_client_rate_history_batches; agrupa por transaccion y autor antes de paginar. Conserva get_client_rate_history, snapshots, eventos originales y omision de guardados identicos. Verifica sesion aprobada/activa, acceso al cliente y tenant; anonimo sin EXECUTE. El filtro por tarifa conserva el guardado completo para contexto.
+- Validaciones: TypeScript y ESLint de archivos modificados OK; suite general 676/676 y prueba adicional de filtros/cierre aprobada (7/7 pruebas focales); build y postbuild OCR OK; check:finance-ui OK. Migracion y suite SQL en PostgreSQL local aislado con rollback: agrupacion/paginacion, filtros, fechas inclusivas en Honduras, guardados identicos, cero, total, otro tenant, usuario inactivo y anonimo OK.
+- Navegador: componente real con sesion y RPC ficticias en fixture de produccion local; cinco movimientos inicialmente cerrados, detalle antes/despues, filtros, limpieza y paginacion comprobados a 1280/768/390 px sin overflow. Captura movil revisada; fuente fallback del fixture. El primer fixture dev no activo interacciones; se uso build de produccion. Escape cierra y devuelve el foco al boton; error/reintento comprobados. Seis comprobaciones aprobadas, cero excepciones JavaScript. Evidencia privada en .ua/intermediate/compact-rate-* y client-rates-compact-* (ignorado).
+- Pendiente: aplicar migracion antes de publicar frontend; UAT autenticada en ambientes destino. Commit pendiente.
+
+### 13/11/2026 - ACC-INVOICE-SERVICE-03 / ACC-DUE-DATE-01 - Servicio unico en Facturacion y vencimiento manual
+
+- Estado: implementado y validado localmente; SQL local aprobado con rollback. Publicacion, aplicacion de migracion en Production/Trial y UAT autenticada pendientes. Sin cambios de datos reales ni alteracion de documentos emitidos. Commit pendiente al registrar.
+- Factura/Proforma/borrador: un servicio por concepto, sin duplicados I/E. Elegir otro servicio conserva el checkbox y la tasa fiscal de la linea; solo cambia descripcion, referencia y cuenta de ingreso configurada. Checkbox decide gravabilidad, tasa 15/18 aparece solo cuando aplica, exencion/exoneracion conservan su distincion y el modo fiscal global no muestra una tasa contradictoria. Lineas originadas en cotizacion conservan su proteccion.
+- Cuentas: UI y resolver aceptan Auxiliar o SubCuenta activas/postables de la naturaleza adecuada, conservando pertenencia de tenant y fuente. Una cuenta por concepto y uso (ingreso o costo/gasto) independiente de I/E/Exonerada. Configuracion sincroniza la cuenta entre variantes aplicables; guardar o resolver asignaciones contradictorias se rechaza. No se cambian IDs, niveles ni asignaciones existentes. Compras conserva el fallback manual/default autorizado cuando no existe asignacion.
+- Vencimiento: campo editable con minimo fecha de emision, validacion al emitir, persistencia y reapertura de borradores. Trigger conserva due_date explicito, aplica condiciones del cliente como default si falta, rechaza fecha anterior a emision y cliente de otra empresa, y calcula payment_condition/credit_days del documento segun el plazo elegido. No modifica condiciones del cliente. NC/ND conservan sus reglas de vencimiento nulo. No hay UPDATE masivo de facturas historicas.
+- SQL: nueva migracion `supabase/migrations/20261113120000_invoice_service_accounts_and_due_date.sql`; reemplaza `save_service_accounting`, `resolve_service_account` y `set_invoice_credit_terms`. Mantiene autorizacion y auditoria de configuracion, permisos del resolver interno y tenant. No se editan migraciones aplicadas.
+- Archivos: `src/lib/service-accounting.ts`, `src/components/invoicing/InvoiceLineSettings.tsx`, `src/components/accounting/ServiceAccountingAssignments.tsx`, `src/app/(protected)/invoicing/new/page.tsx`, `tests/service-accounting.test.mjs`, `tests/invoice-service-flow.test.mjs`, `tests/invoice-drafts-flow.test.mjs`, `supabase/tests/service_accounting_assignments.sql`, `supabase/tests/invoice_due_date_override.sql`, registro en `scripts/validate-audit-sql.mjs` y este documento. Sin dependencias nuevas.
+- Validacion SQL: ocho suites aprobadas en replica `supabase_db_sarierp_gerencia20261104`, incorporando Compras publicada y migracion nueva dentro de cada transaccion: service_accounting_assignments, invoice_due_date_override, supplier_default_expense_account, purchase_optional_supplier_identity, accounting_financial_sources, fiscal_discounts, invoice_drafts_and_master_review y customer_collections. Todas terminaron con ROLLBACK. Incluye emision real con fixture, cuenta SubCuenta, I/E con misma cuenta/asiento, snapshots previos preservados, rechazo de conflicto, vencimientos entre meses/anos, plazo del documento, perfil de cliente intacto y rechazo cross-tenant.
+- Validacion de aplicacion: TypeScript y ESLint enfocado aprobados; suite completa final 646/646 aprobada con concurrencia 1, incluidas pruebas reales del editor de Factura/Proforma, cambio de servicio sin alterar impuesto, modo fiscal global y persistencia/reapertura del vencimiento manual. Next build aprobo compilacion, TypeScript y 115 paginas; postbuild fallo inicialmente por ENOSPC al copiar el runtime OCR y paso al repetir solo esa fase tras limpiar `.next/dev`. No hubo cambios de codigo entre esas fases. diff --check OK.
+- Recursos: primera suite concurrente e intento secuencial interrumpidos por recursos del equipo; la unidad C llego a 46 MiB libres. Se eliminaron solo dependencias regenerables de `.ua/intermediate/ui-release-demo-20261103/node_modules` y cache generado `.next/dev` tras verificar rutas dentro del workspace y ausencia de enlaces; no se tocaron fuentes, documentos, base ni Venex. El equipo requiere espacio adicional para futuras compilaciones.
+- Navegador: pagina real de Facturacion/Proforma y selectores reales con servicios, sesion y DB ficticios en Chrome local a 1280/768/390 px. Servicio unico, ausencia de opciones I/E, cuenta SubCuenta resuelta, checkbox/tasa conservados al cambiar servicio, modo global Exento coherente y payload de borrador con vencimiento 15/01/2027 comprobados. Sin overflow ni excepciones JavaScript; captura movil revisada. No equivale a UAT autenticada ni a emision de documentos reales.
+- Integridad local: migraciones ejecutadas transaccionalmente y revertidas; hashes de cuatro funciones y conteos de facturas, compras, partidas y asignaciones identicos antes/despues de la prueba final. Servidor de fixtures y Chrome aislado cerrados al terminar la comprobacion.
+- Propuesta solicitada, aun sin implementar: `docs/purchase-orders-proposal.md`, solicitud -> orden aprobada -> factura recibida -> cuenta por pagar -> pago. Incluye proveedor, fiscalidad mixta/gravada/exenta/exonerada, oficina, fechas, condiciones contado/credito, cheque y referencias, factura/CAI, observaciones, conversion/equivalencia y ajustes por nota de debito. La orden no consume CAI de boleta ni registra deuda/pago. Roles de aprobacion, autoaprobacion y recepcion fisica quedan por definir antes de implementar el modulo.
+- Pendientes: aplicar SQL y publicar; UAT de emision/PDF/asiento con usuario autenticado en el entorno destino. No se aplicaron migraciones remotas ni se modificaron cuentas o datos reales. Evidencia privada en `.ua/intermediate/service-audit-20261113/`. Venex sigue fuera del alcance.
+
+### 12/11/2026 - ACC-PURCHASE-SERVICE-02 - Servicio unico en Compras e ISV separado
+
+- Estado: implementado y validado localmente; release Production autorizado. Migracion/despliegue remoto y UAT autenticada pendientes.
+- Compras muestra un concepto por servicio, sin duplicados I/E. Checkbox Gravado / lleva ISV y tasa 15/18 cuando aplica. Boleta de Compra nunca permite credito fiscal. Facturacion conserva sus variantes y cuentas de ingreso.
+- Decision del usuario (12/11): cuando falta asignacion de compra se conserva la cuenta manual o predeterminada del documento/proveedor. No se exige completar las cuentas de gasto para publicar este ajuste. Una cuenta de compra configurada y valida es fija e independiente del impuesto; configuraciones contradictorias o invalidas bloquean la emision. Limpiar el servicio restablece el default del documento. Seleccionar otro servicio sin asignacion conserva un override manual existente.
+- Servidor: migracion 20261112120000_purchase_unique_service_account.sql reemplaza solo create_purchase_document. Conserva permisos, tenant, idempotencia, calculos, descuentos, snapshots, Cuentas por Pagar y flujo fiscal. Valida pertenencia del servicio incluso con cuenta manual; asignacion ausente admite fallback, asignacion invalida/ambigua no. No cambia cuentas, perfiles, asignaciones ni documentos emitidos.
+- Archivos: src/app/(protected)/accounting/purchases/page.tsx, src/components/invoicing/InvoiceLineSettings.tsx, src/lib/service-accounting.ts, tests/service-accounting.test.mjs, tests/purchase-service-flow.test.mjs, supabase/tests/service_accounting_assignments.sql, supabase/migrations/20261112120000_purchase_unique_service_account.sql y este registro. Sin dependencias nuevas.
+- Validaciones locales: TypeScript y ESLint enfocado OK; 11 pruebas dirigidas y suite completa 639/639 con concurrencia 1. Build local intentado: worker Turbopack interrumpido (10054) bajo presion de memoria; se exige build remoto de Quality antes de Production. Cinco suites SQL en replica Docker supabase_db_sarierp_gerencia20261104: service_accounting_assignments, supplier_default_expense_account, purchase_optional_supplier_identity, accounting_financial_sources, fiscal_discounts. Rollback con hashes/conteos de funcion, compras, partidas y asignaciones sin cambios. Incluye 0/15/18%, Boleta sin credito, asiento balanceado, defaults del documento/proveedor, falta total de cuenta, overrides, cuenta de ingreso invalida y servicio de otro tenant.
+- Navegador: pagina real de Compras con sesion/DB ficticias en Chrome a 1280/768/390 px, sin overflow; selector unico, cuenta manual/predeterminada, cuenta fija 0/15/18, bloqueo por ambiguedad, limpiar servicio y payload de Boleta sin credito comprobados. No se emitieron documentos reales. Evidencia privada en .ua/intermediate/purchase-service-close-20261112/.
+- Conciliacion Production actualizada en solo lectura: 95 perfiles / 190 variantes; cero cuentas de compra asignadas. El fallback autorizado evita bloquearlos. El Excel define principalmente cuentas de ingreso; no se infieren cuentas de gasto ni se alteran jerarquias. Servicios faltantes, diferencias de categoria y compatibilidad SubCuenta/Auxiliar quedan como configuracion separada del ajuste de Compras, sin cambios de datos.
+- Pendientes: aplicar esta unica migracion en Production, confirmar CI/build/despliegue/smoke; UAT autenticada completa de emision/PDF/asiento. Trial queda fuera del release. docs/venex-tracking-analysis.md no pertenece a este cambio.
+- Commit: pendiente.
+
+
+### 09/11/2026 - UX-GLOBAL-SEARCH-01 - Buscador central del ERP
+
+- Estado: implementado y validado localmente; publicacion autorizada el 09/11/2026 en preparacion. UAT autenticada por rol/tenant pendiente. Commit de publicacion pendiente.
+- Cambio: acceso central en header (lupa en movil), Dialog reutilizado con foco/Escape, busqueda diferida 300 ms desde dos caracteres, enlaces directos y hasta ocho coincidencias por tipo con aviso de limite. Consulta numeros, referencias, nombres, rutas y notas comerciales/internas de cotizaciones, bookings, instrucciones, clientes, agentes, proveedores y documentos de facturacion. Pricing abre su comparador existente. No indexa adjuntos, PDFs ni todas las columnas/tablas del ERP.
+- Acceso: cliente Supabase autenticado existente con RLS, tenant explicito en todas las consultas y filtro de rutas segun rol; perfil aprobado/activo del usuario actual. Sin service role, RPC nueva, migraciones ni cambios de permisos. Cancelacion y descarte de respuestas al cambiar texto, cerrar o cambiar contexto de usuario/tenant/rol. Errores por fuente visibles con reintento; no se presentan como ausencia de coincidencias.
+- Archivos: `src/components/layout/GlobalSearch.tsx`, `src/components/layout/topbar.tsx`, `src/lib/global-search.ts`, `tests/global-search.test.mjs` y este registro. SQL: ninguno; sin dependencias nuevas.
+- Validaciones: TypeScript final, ESLint enfocado, diff --check, build/postbuild PDF y suite completa 638/638 aprobados. Chrome con componente real y datos ficticios: referencia en pricing_notes encuentra cotizacion con enlace directo, foco inicial, Escape con retorno de foco, errores por fuente y reintento; 1280/768/390 sin overflow. Capturas de escritorio/movil revisadas. Los fallos previos por memoria no se reprodujeron en la validacion final.
+- Pendientes: verificar con sesiones reales RLS y visibilidad de resultados/enlaces para cada rol y tenant y navegacion al detalle en produccion. Las pruebas con cliente simulado no certifican RLS ni UAT. No se consultaron ni modificaron datos reales.
+
+
+### 06/11/2026 - UX-CLIENT-ACTIVITY-08 - Barra compacta y menu de exportacion
+
+- Estado: implementado y validado localmente; commit, publicacion y UAT autenticada pendientes. Demo sin cambios.
+- Cambio: elimina antiguedad en dias de tabla, filtros, orden y reportes; conserva fecha de registro e inactividad. Cuatro controles de ancho fijo 144-208 px y alto 36 px en una fila; acciones de restablecer/actualizar con iconos. En pantallas pequenas la fila tiene scroll horizontal propio, sin ensanchar la pagina. Leyenda resumida al pie de resultados.
+- Exportacion: icono Printer con lista PDF/Excel/CSV. Opcion compact del componente reutilizado FinancialReportExport, predeterminada false para conservar las otras pantallas; cierre al seleccionar, Escape o clic exterior, foco de teclado y bloqueo durante generacion. Exporta la misma lista completa filtrada de seis columnas, sin antiguedad.
+- Archivos: `src/app/(protected)/clientes/activity/page.tsx`, `src/lib/client-activity-report.ts`, `src/components/invoicing/FinancialReportExport.tsx`, `tests/client-activity-report.test.mjs` y este registro. SQL: ninguno; sin dependencias nuevas.
+- Validaciones: 630/630 pruebas Node, TypeScript, ESLint, build/postbuild PDF y diff --check aprobados. Chrome con build estable y datos ficticios: controles en misma fila y anchos/altos verificados, Enter abre, Escape y clic exterior cierran, descargas reales PDF/Excel con filtros y filas fuera de pagina, busqueda, reset, error/reintento y 1440/768/390 sin overflow. Captura escritorio revisada. No se consultaron datos reales ni se enviaron correos. Commit pendiente.
+
+### 06/11/2026 - UX-CLIENT-ACTIVITY-07 - Filtros y exportacion de actividad de clientes
+
+- Estado: implementado y validado localmente. Publicacion y UAT autenticada pendientes; Demo sin cambios.
+- Cambio: busqueda por nombre insensible a acentos/mayusculas, orden alfabetico A-Z/Z-A, mayor/menor inactividad y antiguedad; filtros separados de antiguedad desde el registro e inactividad por rangos de dias y tipo de actividad (sin cotizacion, sin/con movimiento efectivo). Restablecimiento, conteo filtrado y nuevas columnas Registro/Antiguedad.
+- Exportacion: PDF y Excel reales mediante FinancialReportExport existente, con branding, filtros, orden y todos los resultados filtrados, aunque no esten en la pagina visible. CSV adicional del componente reutilizado. Solo uso interno.
+- Archivos: `src/app/(protected)/clientes/activity/page.tsx`, `src/lib/client-activity-report.ts`, `tests/client-activity-report.test.mjs` y este registro. SQL: ninguno; RPC get_client_activity existente ya entrega created_date y restringe empresa, roles y cartera de Ventas. Sin dependencias nuevas.
+- Controles: cargar todas las paginas autorizadas antes de filtrar/exportar; fallos, totales cambiantes, filas duplicadas o carga incompleta bloquean resultados/exportacion. Cancelacion al desmontar/cambiar usuario, empresa o rol. No se consulta directorio global ni se exportan seller_id u otros campos privados del RPC. Fecha base de antiguedad de Honduras.
+- Validaciones: 630/630 pruebas Node aprobadas, incluidas carga multipagina, filtros combinados/limites, antiguedad vs inactividad, recuperacion de error, UI real con exportacion fuera de pagina, Excel y PDF multipagina con ultima fila. TypeScript, ESLint, diff --check y build/postbuild del runtime PDF aprobados. Chrome con pantalla real y RPC/branding ficticios: 125 filas en dos paginas RPC, busqueda sin acentos, filtros combinados, Excel/PDF descargados con filas fuera de pagina y sin resultados excluidos, reset/error/reintento; 1440/768/390 sin overflow. Capturas escritorio/movil revisadas. El fixture dev produjo errores historicos del recargador HMR; la comprobacion final con build/start aislado paso sin excepciones. Sin consulta ni escritura de datos reales desde el navegador. Commit pendiente.
+
+### 05/11/2026 - UX-ACCOUNTING-EMAIL-06 - Leyenda de correo automatico
+
+- Estado: implementado; validacion y publicacion Production en curso. Demo excluido. No requiere SQL ni modifica el calendario o la activacion de avisos.
+- Cambio: leyenda al pie de HTML y texto alternativo indicando generacion automatica, no responder y utilizar los canales de contacto anteriores. Conserva el bloque de consultas y correo de Zonia.
+- Archivos: `src/lib/server/accounting-reminders.ts`, `tests/accounting-reminders.test.mjs` y este registro. Sin dependencias nuevas.
+- Validaciones: 625/625 pruebas Node, TypeScript, ESLint del helper, build/postbuild del runtime PDF y diff --check aprobados. Publicacion pendiente al registrar; no se envia otro correo de prueba. Commit pendiente.
+- Evidencia anterior: diseno UX-ACCOUNTING-EMAIL-05 publicado en Production con commit 5375e3d; prueba adicional autorizada aceptada en un intento, auditoria 82a8e18a-df63-46f3-9905-eb4521d62a60. Usuario confirma recepcion y conformidad antes de solicitar esta leyenda.
+
+### 05/11/2026 - UX-ACCOUNTING-EMAIL-05 - Diseno del recordatorio contable
+
+- Estado: implementado y validado localmente; publicacion y comprobacion del nuevo diseno en Gmail pendientes. La entrega del diseno anterior fue confirmada por el usuario. No se envio otro correo ni se activaron avisos automaticos; Demo excluido.
+- Cambio: logo centrado, jerarquia visual y acentos rojos para Sari, resumen de factura y saldo, bloque de consultas con el texto solicitado y correo zonia.contabilidad@sarihn.com; sin telefono. Reply-To de Sari dirigido a Zonia. Otros tenants conservan su identidad y contacto propios.
+- Archivos: `src/lib/server/accounting-reminders.ts`, rutas cron `accounting-alerts/route.ts` y `accounting-alerts/test/route.ts`, `tests/accounting-reminders.test.mjs` y este registro. SQL: ninguno; sin dependencias nuevas.
+- Validaciones: 625/625 pruebas Node aprobadas; TypeScript, ESLint enfocado, build/postbuild del runtime PDF y diff --check aprobados. Render de la plantilla real en Chrome a 1280/768/390 px: logo cargado y centrado, enlace de Zonia, ausencia de telefono y sin overflow; captura movil revisada.
+- Configuracion Production verificada mediante lectura: anticipos 7/3/0 dias, vencidas cada 7 dias, email y portal de clientes apagados. No se modifico el calendario. PDF adjunto aun no implementado; existe generador reutilizable de la factura emitida. Commit pendiente.
+
+### 05/11/2026 - GOV-CLIENTS-04B - Branding contable y prueba controlada autorizada
+
+- Estado: plantilla HTML y prueba de operador implementadas; auditoria aplicada/registrada en Production, validacion del transporte de Production en curso. No se activan correos automaticos ni se modifican contactos del cliente. Demo excluido.
+- Autorizacion: usuario solicita una unica prueba a su correo registrado en Inversiones Dennis y exige branding completo. Coincidencia exacta de cliente/empresa/correo verificada en Production; no se seleccionan otros destinatarios ni se crea una cuenta de portal. Los datos monetarios de la prueba son ficticios y el mensaje indica SIN COBRO REAL.
+- Archivos/SQL: `accounting-reminders.ts`, helper central `company-settings.ts`, rutas cron y `/api/cron/accounting-alerts/test`, transporte `email-delivery.ts`; migracion `20261105140000_accounting_controlled_email_tests.sql` y prueba SQL; regresiones de plantilla y endpoint. Sin dependencias nuevas. Datos de marca por tenant explicito, logo HTTPS absoluto, colores y contacto configurados, remitente comercial conservando la direccion autorizada, HTML escapado y texto alternativo.
+- Controles: prueba separada de facturas/scheduler, outbox con lease/idempotencia/evidencia; secreto privado, ambiente Production verificado, tenant del proxy, correo registrado y motivo. Resultados inciertos no se reenvian. Fallo explicito requiere confirmar no aceptacion y CAS antes de autorizar un reintento. GET consulta el proveedor y valida destinatario/branding sin enviar.
+- Validaciones: 625/625 pruebas Node y 44 archivos SQL/RLS aprobados; TypeScript y ESLint enfocado OK. Correo real renderizado con logo publico HTTP 200, escritorio/movil 1280/390 sin overflow; capturas revisadas. Build/postbuild final OCR aprobados. Migracion con huellas de diez tablas fiscales/comerciales/contables conservadas.
+- Prueba local: proveedor rechazo la clave local de Resend (API key is invalid), estado failed, sin ID de aceptacion y sin entrega. Se conserva el mismo request_id para reintento unico con transporte Production tras confirmacion de no aceptacion. No se reemplaza ni se expone ninguna clave.
+- Riesgos/pendientes: comprobar aceptacion y entrega real con credencial del servidor; mantener ACCOUNTING_ALERTS_EMAIL_ENABLED=false y canales de clientes apagados. El estado sent confirma aceptacion, no bandeja de entrada. Prueba de email no reemplaza UAT de Gerencia/Zonia/Operaciones.
+- Commit funcional: 58833fced071ff9274431b81bf0b246d7d148572. Publicacion solo main; evidencia de entrega por request_id en auditoria separada.
+
+### 05/11/2026 - GOV-COURTESY-02 / GOV-ALERTS-03 / GOV-CLIENTS-04 / FIN-EXPENSES-05 - Fases restantes de Gerencia
+
+- Estado: tres migraciones aplicadas y registradas en Production; RLS, aprobadores y huellas de diez tablas verificadas. Interfaz publicada en Production (release e0c5e1b); Quality 42100031099 y smoke aprobados; UAT autenticada pendiente. Solo Production; Demo excluido. No se enviaron correos ni se crearon usuarios.
+- Archivos/SQL: migraciones `20261104160000_invoice_line_courtesies.sql` y `20261105120000_accounting_alerts_and_client_activity.sql` y `20261105130000_accounting_alert_explicit_activation.sql`; sus pruebas en `supabase/tests`; bandejas de cortesias y alertas, contactos/auditoria de entregas, actividad de clientes, gastos mensuales, portal de saldo, scheduler y guardas del proxy. Detalle y limites en `docs/gerencia-implementacion-fases2-5.md`. Se reutilizan permisos de fase 1, cierre/cola canonica, saldo canonico y transporte idempotente existente. Sin nuevas dependencias.
+- Cortesias: motivo y revision, no autoaprobacion, huellas de contexto/autoridad, exclusion atomica, correlativo idempotente, cotizacion original intacta, orden/impuesto/cuenta/origen conservados. Bloqueo del 100% de descuento. Guardado sin cambios conserva revision aprobada. Aviso inmediato al revisor y decision al solicitante; permisos de ruta estrechos no habilitan emision a otros roles.
+- Alertas/clientes: destinatarios por asignacion/empresa, calendario Honduras, etapas configurables, pagos parciales/completos, clientes/portal activos y aprobados, opt-in de correos exactos/deduplicados. Outbox con lease/evidencia y retencion de resultados inciertos. Inactividad por cotizacion/movimiento real; Ventas solo su cartera. Scheduler diario autenticado, Production verificado; correo bloqueado por defecto hasta validacion de destinatarios/transporte/volumen.
+- Gastos: partidas HNL Gasto/Costo separadas, mes anterior, ranking cuenta/proveedor historico, reversos y detalle del asiento. Adquisiciones registradas de activos aparte; no se equiparan movimientos bancarios a gasto/inversion. Lecturas completas, sin resultados parciales tras errores.
+- Validaciones ejecutadas: reconstruccion de historial en `supabase_db_sarierp_gerencia20261104`; toda la suite SQL/RLS aprobada; regresiones fiscales y de borradores/cortesias, pagos, autorizacion/aislamiento y destinatarios aprobadas. Suite Node final 620/620; TypeScript, ESLint de archivos nuevos y build/postbuild OCR aprobados. Lint:ci: 215 diagnosticos historicos, cero regresiones; los dos avisos de clientes/page.tsx anteceden este enlace de navegacion. Chrome: seis paginas reales con datos ficticios, 20 comprobaciones y anchos 1280/768/390 sin overflow ni excepciones. Aprobacion, error de servidor y reintento, modal y CSV verificados; cero escrituras reales. El fixture usa fallback sans-serif y bloquea inyecciones de red del antivirus, sin llamadas a Supabase/proveedores reales.
+- Riesgos/pendientes: SQL/ledger y RLS/fingerprints completados exclusivamente en Production; verificacion CI/smoke de la publicacion registrada por SHA; UAT autenticada con Admin/Zonia/Operaciones. Mauricio aun no existe y no se aprovisiona. Correos reales desactivados: requiere prueba controlada, conciliacion y validar capacidad del lote inicial (20 primeros intentos/ejecucion) antes de activar. No confundir mock, smoke publico ni SQL rollback con UAT o entrega real.
+- GOV-ALERTS-03B: activacion explicita por empresa; el scheduler solo recorre empresas registradas. Sari habilitado para avisos internos con evento de despliegue autorizado sin actor simulado; otras empresas y canales de clientes desactivados. CRON_SECRET sensible y flag de correo false configurados solo en Vercel Production.
+- Commit funcional: 3642cf654a7754f4dba0b46f642a0e7c8b5ac2dd. Publicacion exclusiva de main; evidencia de CI/deployment/smoke vinculada al SHA de release.
+
+
+### 04/11/2026 - GOV-COURTESY-01 - Reglas y autorizadores de cortesias (fase 1)
+
+- Estado: permisos aplicados y verificados en Production; interfaz validada localmente, publicacion en curso. UAT autenticada pendiente. Demo excluido por instruccion vigente del usuario.
+- Alcance: designacion explicita para revisar cortesias, adicional al master de Contabilidad actual. No incorpora automaticamente a todos los Admin; no permite borrar lineas ni modifica emision, descuentos, facturas, CxC o envios de correo. El flujo por cada cortesia corresponde a fase 2.
+- Identidades verificadas en Production, solo lectura: Admin Pruebas activo/aprobado y Zonia Flores activa/aprobada, master actual; Mauricio Rivera aun no existe. Aprovisionamiento inicial por ID y con origen de despliegue autorizado, nunca por nombre ni suplantando sesion de usuario.
+- Archivos: migracion `20261104140000_invoice_courtesy_review_permissions.sql`, prueba `supabase/tests/invoice_courtesy_permissions.sql`, `scripts/validate-audit-sql.mjs`, `src/components/invoicing/InvoiceCourtesyPermissions.tsx`, `src/app/(protected)/accounting/settings/page.tsx`, `tests/invoice-courtesy-permissions.test.mjs`, `docs/gerencia-implementacion-fase1.md`, revision previa y este registro.
+- Controles: grants sin escrituras directas, RLS por tenant, consultas y cambios autorizados en servidor, revocacion inmediata del permiso efectivo, motivo y auditoria inmutable, confirmacion y bloqueo de duplicados. El permiso master por si solo no permite gestionar designaciones; administracion gestiona la lista.
+- Validaciones: nueva migracion y regresion SQL ejecutadas en transaccion revertida de `supabase_db_sarierp_accounting27_replay`; autorizacion, revocacion, master, otra empresa, usuario pendiente/inactivo/Cliente, auditoria e idempotencia OK. UI 4/4: motivo/confirmacion, rechazo conservando lista, lectura sin administracion para Contabilidad y doble confirmacion/desmontaje sin efectos tardios.
+- Validacion completa: 609/609 pruebas, TypeScript, ESLint de archivos afectados y build/postbuild PDF aislado OK. Chrome con componente real y usuarios/RPC ficticios: 7 comprobaciones, 1280/768/390 px sin overflow, confirmacion, fallo que conserva la lista y revocacion exitosa; sin excepciones ni escrituras reales. El fixture requirio corregir paginacion repetida y usar build/start estable por recargas HMR; no se altero el producto por ese problema.
+- Production: aplicada y registrada solo `20261104140000`; aprovisionamiento atomico de Admin Pruebas con origen Despliegue autorizado y actor nulo, sin suplantar una sesion. Verificacion de solo lectura bajo contexto de perfiles: Admin Pruebas y Zonia autorizados; un permiso explicito y un master, un evento de designacion, RLS activo y anon bloqueado. Huellas de `is_invoice_master`, `issue_invoice_draft` y `create_invoice_from_quotation` identicas antes/despues. Sin cambios en facturas/asientos ni correos.
+- Pendientes: verificar CI/despliegue de interfaz y UAT autenticada. Solicitudes individuales, avisos, scheduler y reportes nuevos permanecen en fases posteriores. Mauricio requiere crear su usuario e incorporarlo expresamente. Commit: pendiente al registrar. Evidencia ignorada `.ua/intermediate/courtesy-phase1-*`.
+
+### 04/11/2026 - UX-MANUAL-HISTORY-01 - Acciones PDF desde historial
+
+- Estado: publicado en Produccion y Demo; smoke publico aprobado. UAT autenticada de impresion/descarga pendiente.
+- Cambio: iconos accesibles para editar, abrir/descargar PDF en otra pestana e imprimir cada version guardada; resaltado de fila al pasar el mouse. Genera desde el snapshot guardado sin reemplazar el editor ni consultar el emisor actual. Reutiliza el generador PDF y el patron existente de impresion en pestana reservada durante el clic.
+- Archivos: `src/components/invoicing/ManualInvoiceEditor.tsx` y este registro. SQL: ninguno.
+- Controles: bloquea acciones durante generacion, avisa si el navegador bloquea ventanas, descarta resultados si cambia el contexto y libera URLs al cerrar la pestana o tras 30 minutos.
+- Validaciones: `npx.cmd tsc --noEmit`, ESLint del componente, suite completa 605/605 y build de produccion/postbuild PDF aislado aprobados; `git diff --check` sin errores. Sin prueba autenticada de navegador.
+- Publicacion: main `28f3ca5b5af2752b90760f31961f702457ef76ec`; Demo `ee0f2163cd66cf21a310b1c7e7bfaa3602f429c4`. Vercel confirma Deployment has completed para ambos commits: Production `2F967amBa67bDXGxQUtNMvHg5F9e`, Demo `4y3RbSMbNhJBMR1K5QhicuTUkaLQ`, verificado mediante estados GitHub de Vercel. CLI Vercel sin sesion; no se requirio autenticar ni alterar credenciales.
+- Postflight: 8 comprobaciones HTTP entre sari.forwarders.app y demo.forwarders.app: login 200, scanner 307 a login, APIs historial/OCR 401 sin sesion. Componente con hash identico en ambas ramas. Evidencia ignorada `.ua/intermediate/history-actions-*`.
+- CI: Quality main `41843806254` aprobado (aplicacion y SQL/RLS); Demo `41843806351` SQL/RLS aprobado, aplicacion detenida en Reviewed parity with Production source. Environment parity `41843806141` falla por diferencias anteriores del OCR: ruta, lector navegador, extractor servidor, validador y migracion de emisor opcional presentes solo en main. El cambio del historial no agrega diferencias; no se sincroniza ni aplica SQL ajeno a esta publicacion.
+- Riesgos/pendientes: corregir por separado la paridad previa de OCR/emisor en Demo. Impresion automatica depende del visor del navegador; este conserva su control nativo. Verificar apertura/descarga/impresion con sesion real. Analisis Venex ajeno excluido; sin cambios de SQL ni datos de negocio.
+
+### 2026-11-03 - UX-OCR-CLAUDE-03 - Compatibilidad con la clave AI STAR del cliente
+
+- Estado: adaptacion validada localmente; destinatario AI STAR, configuracion Vercel y despliegue Produccion/Demo autorizados expresamente por el usuario. Publicacion en curso.
+- Hallazgo: tras reparar el runtime PDF, el reintento ya alcanza al proveedor pero devuelve 502 con mensaje de credenciales rechazadas. El usuario confirma que la clave de Vercel proviene del panel de 10 millones de tokens. El OCR estaba enviandola a `api.anthropic.com`, mientras el proveedor AI STAR documenta su propio Base URL y autenticacion Bearer; la configuracion anterior de Claude Code utilizaba ese proveedor.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`, `src/app/api/manual-invoices/ocr/route.ts`, `src/components/invoicing/ManualInvoiceEditor.tsx`, `tests/manual-invoice-ai.test.mjs`, `tests/manual-invoice-routes.test.mjs`, `docs/manual-sari-usa-invoices.md` y este registro. SQL: ninguno. No modifica el lector PDF, dependencias ni empaquetado ya reparados.
+- Cambio propuesto: variable de servidor `MANUAL_INVOICE_OCR_BASE_URL` opcional, con default API oficial Anthropic. Admite solamente origen HTTPS oficial o `https://ai.starimg.ru`, sin credenciales/query/hash en URL ni redirecciones. AI STAR usa `/v1/messages` y `Authorization: Bearer`; Anthropic oficial conserva `x-api-key`. El formulario no puede seleccionar el destino. El scanner identifica al receptor AI STAR cuando corresponde. Se conservan autorizacion, cuota, archivos, esquema, fechas, revision y respaldo local.
+- Evidencia del proveedor: https://ai.starimg.ru/help, instrucciones publicas de error 401 y configuracion Claude Code; el catalogo publico incluye `claude-sonnet-5-5`. Pruebas locales usan exclusivamente respuestas y claves ficticias; no se han transmitido claves reales ni facturas a AI STAR durante esta adaptacion.
+- Validaciones: enfocadas 17/17 OK, incluida ruta con ambos destinos y rechazo de destino enviado en formulario; suite completa 600/600, TypeScript, ESLint de archivos afectados y build/postbuild de PDF aislado OK. Chrome con pagina real y respuestas ficticias: flujo de lectura/error/cancelacion/respaldo conservado, aviso AI STAR visible dentro del viewport a 1280/768/390 px; cero excepciones y escrituras. Evidencia ignorada `.ua/intermediate/ocr-ai-star-*`. No se ejecuto ninguna solicitud autenticada al proveedor.
+- Riesgos/pendientes: usuario confirma expresamente AI STAR como destinatario de la clave configurada y las facturas, autoriza la variable en Vercel Production y publicacion Produccion/Demo. Verificar credenciales/capacidades reales con una prueba pequena autorizada antes de documentos reales. Compatibilidad local simulada no certifica saldo, disponibilidad ni extraccion del proveedor. Claude Code conserva autenticacion por suscripcion; no se restaura su configuracion API global.
+- Commit: pendiente.
+
+### 2026-11-03 - UX-OCR-CLAUDE-02 - Dependencia nativa PDF incluida en el despliegue
+
+- Estado: publicado en Produccion y Demo; runtime PDF aislado validado en ambos builds Linux. CI, SQL/RLS, paridad y smoke publico aprobados; reintento autenticado del PDF original pendiente.
+- Hallazgo: POST `/api/manual-invoices/ocr` devolvia 500 al validar PDFs. Logs de Production registran `Cannot find module '@napi-rs/canvas'` desde PDF.js; el manifiesto `.nft.json` incluia PDF.js/worker pero no Canvas ni su binding nativo. Reproduccion aislando esa dependencia: `ReferenceError: DOMMatrix is not defined`, antes de cuota y llamada a Claude. La importacion quedaba fuera del manejo de errores del lector.
+- Archivos: `next.config.ts`, `package.json`, `scripts/validate-invoice-ocr-runtime.mjs`, `src/lib/server/manual-invoice-pdf.ts`, `tests/manual-invoice-pdf-limit.test.mjs`, `docs/manual-sari-usa-invoices.md` y este registro. SQL: ninguno. Sin nuevas dependencias: Canvas ya pertenece a las dependencias opcionales del PDF.js fijado.
+- Cambio: tracing explicito de `@napi-rs/canvas` y los paquetes de binding por plataforma para la ruta OCR. `postbuild` comprueba el manifiesto, copia solo los archivos PDF/Canvas trazados a un directorio temporal fuera del checkout y abre un PDF sintetico en un proceso independiente; sin acceso a node_modules del proyecto ni llamadas API. Un fallo bloquea el build. La inicializacion del lector ahora devuelve 503 con alternativa foto/lectura local en lugar de un 500 generico, con diagnostico seguro sin documentos ni claves.
+- Validaciones: prueba del artefacto anterior falla como corresponde por Canvas ausente. Build con paquete corregido y apertura real del PDF sintetico desde el paquete aislado OK; regresiones enfocadas 14/14, suite completa 597/597, TypeScript y ESLint de archivos afectados OK. Reproduccion sin dependencia ahora produce el 503 explicativo esperado, sin enviar archivos ni consumir API.
+- Riesgos/pendientes: reintentar el PDF reportado con sesion real; la prueba de empaquetado no certifica acceso/saldo del proveedor ni exactitud de extraccion. Conserva autorizacion, cuota, limites de archivo/paginas, politica de revision y configuracion del proveedor. No se enviaron originales a servicios externos en estas pruebas.
+- Publicacion: commit funcional main a9f54518365f3573f54cf8b51ad1ac8fb3fd7600; equivalente Demo 2e23aabf6eca378e4fdd16cec1ac81ab4e232d59. Solo 7 archivos del fix; analisis Venex ajeno excluido. Sin SQL ni escrituras de negocio.
+- Vercel: Produccion dpl_55ueetjXtWs1DocbeKAeiEYXUGhF READY (https://sarierp-7hi27ir7g-claudherhn-5641s-projects.vercel.app); Demo dpl_Gxm4wry2uQ7mRPTq5Dpv8iRRmQoR READY (https://sarierp-bo4cuax4q-claudherhn-5641s-projects.vercel.app). Ambos builds Linux registran Invoice OCR packaged PDF runtime OK. Smoke publico: login 200, scanner 307 a login, APIs OCR/historial 401 JSON; manifest del alias coincide con el despliegue inmutable.
+- CI: Quality main 41729167296 y Demo 41729166790 aprobados, incluyendo SQL/RLS y postbuild aislado. Paridad 41729167407 aprobada; ejecucion Demo cancelada por concurrencia. Paridad local: 588 archivos compartidos, 26 variantes revisadas, cero diferencias. Demo: 603/603 pruebas y TypeScript OK. Lint:ci main: 566 archivos, 215 diagnosticos historicos, cero regresiones.
+- Commit funcional: a9f54518365f3573f54cf8b51ad1ac8fb3fd7600.
+
+### 2026-11-03 - UX-OCR-CLAUDE-01 - Lectura de facturas SARI USA con Claude y respaldo local
+
+- Estado: publicado en Produccion y Demo; Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada y acceso/saldo de Anthropic pendientes.
+- Hallazgo: el scanner utilizaba solo Tesseract/PDF.js en el navegador. El endpoint anterior dependia de OpenAI y no consumia la configuracion Anthropic agregada por el usuario en Vercel.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`, `src/lib/server/manual-invoice-pdf.ts`, `src/lib/browser/manual-invoice-ai.ts`, `src/app/api/manual-invoices/ocr/route.ts`, `src/components/invoicing/ManualInvoiceEditor.tsx`, `next.config.ts`, `tests/manual-invoice-ai.test.mjs`, `tests/manual-invoice-pdf-limit.test.mjs`, `tests/manual-invoice-routes.test.mjs`, `docs/manual-sari-usa-invoices.md` y este registro. SQL: ninguno. Sin nuevas librerias.
+- Cambio: proveedor `anthropic` con `ANTHROPIC_API_KEY` exclusiva de servidor y modelo configurable (`claude-sonnet-5-5` por defecto). Messages API, archivo original en base64, JSON Schema, pensamiento adaptativo/esfuerzo medium, 8192 tokens de salida y plazo de 75 segundos; sin temperatura ni reintentos facturables automaticos. Conserva compatibilidad explicita con OpenAI.
+- Flujo: disponibilidad autenticada sin secretos; boton Leer con IA y opcion Leer en este dispositivo. Informa el envio a Anthropic. Conserva orden de fechas seleccionado, ceros, campos ilegibles vacios y revision antes de guardar; rechaza respuestas truncadas/rechazadas, valida campos e informa diferencias de total calculadas en centavos. Cancelar o fallar no aplica respuestas tardias ni borra correcciones.
+- Controles: mantiene roles, tenant, dominio Sari, cuota diaria atomica de 20 intentos/usuario y archivo de 3 MB. PDF.js existente comprueba PDF valido/sin contrasena y maximo 5 paginas antes de la cuota y llamada externa; sin renderizar ni ejecutar acciones del PDF. Worker de servidor incluido explicitamente en tracing. Logs solo proveedor/modelo/duracion/tokens, sin contenido ni claves. No crea facturas fiscales, asientos ni CxC por leer.
+- Validaciones: suite completa `npm.cmd test`: 596/596 OK. `npx.cmd tsc --noEmit`, ESLint de archivos afectados y build de produccion aprobados. PDF real sintetico de 1/5 paginas aceptado; 6 paginas o corrupto rechazado antes de envio. Worker PDF incluido en el tracing de produccion. Chrome sobre el componente real con sesion/proveedor ficticios: 7 comprobaciones OK, cero excepciones JS/escrituras; llenado, fechas DMY, conservacion de correcciones al fallar, cancelacion y respaldo local; 1280/768/390 px sin overflow, capturas revisadas. Se amplio la base del campo de archivo para evitar que los botones lo comprimieran en movil/tableta. El fixture requirio corregir su inicializacion de fetch simulado ante HMR; no se cambiaron controles de la aplicacion por ese problema. Evidencia ignorada: `.ua/intermediate/ocr-ai-*` y `check-ocr-ai-browser.mjs`.
+- Riesgos/pendientes: verificar acceso/saldo del modelo con API real y UAT con originales autorizados. Las cuatro variables de Vercel ya fueron comprobadas. Una cancelacion tras iniciar la llamada no garantiza evitar cargos de Anthropic. No se ha enviado ningun documento real al proveedor ni utilizado la clave en estas pruebas.
+- Publicacion: main d435d9d189c07092a08b814a81e1c37ab524d56f; equivalente Demo 36855afcd89d4e3a25ccde6423517feadf204974. Solo 11 archivos OCR; sin migraciones ni escrituras de datos de negocio.
+- CI: Quality main 41719255760 y Demo 41719255332 aprobados, aplicacion y SQL/RLS. Paridad 41719256077 aprobada; la otra ejecucion fue cancelada por concurrencia. Paridad local: 588 archivos compartidos, 26 variantes revisadas, cero diferencias. Demo: 602/602 pruebas y TypeScript OK. lint:ci main: 565 archivos, 215 diagnosticos historicos, cero regresiones.
+- Vercel: Produccion dpl_CGz5XFAxgY3o6MX5ZuD4UzKSG66h READY (https://sarierp-9sb3j582b-claudherhn-5641s-projects.vercel.app); Demo dpl_H4ozA7PcSrNud4NdSYEJPZfkm81Z READY (https://sarierp-1au6pgjs5-claudherhn-5641s-projects.vercel.app). SHA exacto consultado por API. Alias/manifest de ambos dominios coincide con el despliegue inmutable; login 200, scanner 307 a login y APIs OCR/historial 401 JSON sin sesion.
+- Configuracion: cuatro variables presentes solo en Production; clave Anthropic tipo Sensitive, sin mostrarla ni copiarla a Demo. Proveedor anthropic, modelo claude-sonnet-5-5 y activacion true comprobados con CLI. El archivo temporal de configuracion fue eliminado tras verificar los tres valores no secretos. La API conserva la autorizacion al dominio Sari; Demo no recibe la clave.
+- Commit funcional: d435d9d189c07092a08b814a81e1c37ab524d56f.
+
+### 2026-11-03 - UX-REPORTS-FINANCE-01 - CxC y CxP conservan la vista de Reportes
+
+- Estado: publicado en Produccion y Demo; Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada pendiente.
+- Hallazgo: /reports?report=receivable o payable reemplazaba toda la pagina por FinanceReportWorkspace, ocultaba las otras pestañas y desmontaba el estado de filtros de Reportes.
+- Archivos: src/app/(protected)/reports/page.tsx, src/components/accounting/FinanceReportWorkspace.tsx, tests/reports-financial-navigation.test.mjs y este registro. SQL: ninguno.
+- Cambio: mantiene cabecera Reportes y selector de reportes de escritorio/movil. CxC/CxP reutilizan FinanceReportWorkspace embebido, con Actualizar, filtros, vistas Documentos/Antiguedad/Movimientos, paginacion y exportaciones existentes. Oculta cabecera/navegacion contables solo al embeber; las rutas independientes conservan su comportamiento.
+- Contexto: cada panel financiero se monta al visitarlo y conserva filtros/vista/pagina al alternar pestañas; los inactivos quedan ocultos. Los controles se remontan al cambiar de panel para cerrar portales desplegables sin borrar filtros; IDs de terceros separados por lado. Comercial conserva busqueda, periodo y paginacion mediante savedViews. La identidad de la pantalla incluye usuario, tenant y rol, descartando paneles anteriores al cambiar contexto.
+- Datos/permisos: usa los mismos hooks y RPC canonicos de documentos/movimientos al corte, sin cambiar calculos, saldos, exportaciones, RLS o roles. Evita consultar los saldos legacy del contenedor cuando esta activo el panel financiero. URLs directas de roles comerciales siguen normalizadas a un reporte permitido.
+- Validaciones: npm.cmd test 587/587 OK; regresiones enfocadas Reportes/Cobranza 9/9 OK; npx.cmd tsc --noEmit OK; ESLint de los 3 archivos afectados OK; npm.cmd run build OK. Chrome con pagina real, Supabase/sesion ficticios y build de produccion local: 7 comprobaciones OK, 0 excepciones JS y 0 escrituras; pestañas, contexto independiente CxC/CxP, recuperacion de Comercial, cierre de menus, IDs, Actualizar y viewports 1280/768/390 px sin overflow de pagina. Capturas revisadas. El fixture dev presentaba un error de HMR durante la recarga; se repitio con build/start de produccion y paso sin errores. Evidencia ignorada en .ua/intermediate/reports-shell-20261103/ y reports-embedded-*-20261103.log.
+- Publicacion: main 616dfb95d5bb0262366f76f6f776b1a123f63dbc; equivalente Demo 67ae604a16a1056fdcc757a3cde5e6e1253c297e. Solo 4 archivos del fix; sin SQL de escritura ni datos reales transferidos a Demo.
+- CI: Quality main 41690241486 y Demo 41690240297 aprobados (aplicacion y SQL/RLS); paridad 41690241190 aprobada. La ejecucion de paridad de Demo fue cancelada por concurrencia y la cubrio main. Paridad local: 586 archivos compartidos, 26 variantes revisadas, 0 diferencias. Demo: 593/593 pruebas y TypeScript OK; lint:ci main: 561 archivos, 215 diagnosticos historicos, 0 regresiones.
+- Vercel: Produccion dpl_6nQvRPLScXMfighqw9BA5Q6GCz6k READY (https://sarierp-kdl5w44ms-claudherhn-5641s-projects.vercel.app); Demo dpl_6iuzNGvsW2hE84Dvk8wZpoizsfXZ READY (https://sarierp-d74e0kqb5-claudherhn-5641s-projects.vercel.app). SHA exacto comprobado por API. Login 200; /reports, sus URLs CxC/CxP y las dos rutas contables independientes redirigen 307 a login sin sesion. Manifest de cada alias coincide con su despliegue inmutable; solo smoke publico.
+- Riesgos/pendientes: UAT autenticada del cambio de pestañas, filtros y exportaciones. Los datos de paneles conservados se refrescan con Actualizar.
+
+### 2026-11-03 - UX-INVOICE-CLIENT-01 - Busqueda de cliente y verificacion del vencimiento
+
+- Estado: publicado en Produccion y Demo; CI Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada pendiente.
+- Hallazgo: Nueva factura utilizaba un select nativo para el cliente pese a existir ClienteCombobox. El vencimiento ya se calcula como fecha de emision + dias_credito del perfil; contado vence el mismo dia, y cambiar cliente/fecha/tipo recalcula. No se cambia esa regla ni se recalculan borradores restaurados o documentos historicos.
+- Archivos: src/app/(protected)/invoicing/new/page.tsx, tests/invoice-drafts-flow.test.mjs, tests/invoice-discount-flow.test.mjs, tests/fiscal-void-flow.test.mjs, tests/billing-points-of-sale.test.mjs y este registro. SQL: ninguno.
+- Cambio: reutiliza ClienteCombobox con busqueda por nombre, codigo y RTN, etiqueta asociada y reinicio por contexto. Incluye codigo_cliente en la consulta existente. Conserva seleccion bloqueada por cotizacion y cliente fijo de NC/ND; se deshabilita al guardar. El callback conserva actualizacion de oficina/cotizaciones y calculo automatico del vencimiento.
+- Validaciones: npx.cmd tsc --noEmit OK; ESLint de los 5 archivos afectados OK; npm.cmd run build OK; npm.cmd test 583/583 OK. Regresion del formulario real: hoy + 30 dias, cambio a 15 dias, contado, cambio de mes/anio y febrero bisiesto, mas payload de borrador con fecha de vencimiento calculada. Pruebas existentes de CAI/oficina, descuento, proforma y borradores adaptadas al combobox y aprobadas.
+- Navegador: pagina real con Supabase/sesion ficticios, Tailwind comprobado antes de capturar; 6 comprobaciones OK (nombre sin acento/Enter, codigo, RTN, vencimiento y menu a 1280/768/390 px). Escape mantiene cliente y devuelve foco, sin resultados visible, limites del popup OK, 0 escrituras RPC y 0 excepciones JS. Capturas revisadas; evidencia ignorada en .ua/intermediate/invoice-client-20261103/ y check-invoice-client-20261103.mjs.
+- Publicacion: commit main 30a9f31bde51afd16266f6a152d30c10d14540cc; equivalente Demo 698862b730cbfad87ec7b3479b7b0705bcb74af7. Quality main 41675338511 y Demo 41675338399 aprobados (aplicacion y SQL/RLS); paridad 41675338501 aprobada: 586 archivos compartidos, 26 variantes revisadas, 0 diferencias. La ejecucion de paridad de Demo fue cancelada por concurrencia y la cubrio main.
+- Vercel: Produccion dpl_9NTaSszTaisPqCnnTKozhTwoTMxd READY (https://sarierp-86iou3dt1-claudherhn-5641s-projects.vercel.app), Demo dpl_6iGW61zyevF2EcdppBuXBkgcvaAS READY (https://sarierp-f5n5v1oxe-claudherhn-5641s-projects.vercel.app). SHA de despliegue comprobado por API. sari.forwarders.app y demo.forwarders.app: login 200, /invoicing/new y /accounting/accounts redirigen 307 a login; manifest de cada alias coincide con su despliegue inmutable. Solo smoke publico; UAT autenticada pendiente.
+- Validacion de cierre: main 583/583 pruebas, Demo 589/589; TypeScript de ambos OK; lint:ci main 560 archivos, 215 diagnosticos historicos, 0 regresiones; build main y builds remotos OK. Sin SQL de escritura, migraciones, cambios RLS ni datos reales transferidos a Demo en esta publicacion.
+- Pendientes/riesgos: UAT autenticada del selector y vencimiento. Cliente a credito sin dias validos conserva el bloqueo existente; NC/ND no tienen vencimiento.
+
+### 2026-11-03 - UX-ACCOUNT-HOVER-01 - Resaltado de filas del catalogo de cuentas
+
+- Estado: publicado en Produccion y Demo; CI Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada pendiente.
+- Hallazgo: Historico resalta sus filas con hover:bg-slate-100/80 y transicion de 150 ms; el catalogo de cuentas solo resaltaba la cuenta abierta en edicion.
+- Archivos: src/app/(protected)/accounting/accounts/page.tsx y este registro. SQL: ninguno.
+- Cambio: mismo fondo gris al pasar el mouse por filas de cuentas, con transition-colors duration-150 y variante oscura dark:hover:bg-slate-800/60. La cuenta en edicion conserva su fondo rose. Sin cambios a acciones, filtros, paginacion, permisos o datos.
+- Validaciones: npx.cmd tsc --noEmit OK; ESLint del archivo OK; npm.cmd run build OK. Chrome local sobre la pagina real con hook contable sintetico y Tailwind aplicado: 4 comprobaciones hover (1280/768 px, claro/oscuro), fondo esperado, duracion 150 ms y restauracion al salir OK; seleccion de edicion preservada, 0 escrituras RPC y 0 excepciones JS. Capturas claro/oscuro revisadas. Evidencia ignorada en .ua/intermediate/account-hover-20261103/ y check-account-hover-20261103.mjs.
+- Publicacion: main 30a9f31bde51afd16266f6a152d30c10d14540cc; Demo 698862b730cbfad87ec7b3479b7b0705bcb74af7; validacion de CI/despliegue registrada en UX-INVOICE-CLIENT-01.
+- Riesgos/pendientes: verificar resaltado desde sesion real; no se certifica UAT autenticada.
+
+### 2026-11-03 - ACC-SERVICE-IMPORT-02 - Carga de servicios sin bloquear por clasificacion fiscal
+
+- Estado: carga de 90 conceptos aplicada y verificada en Sari Produccion por autorizacion expresa del propietario; comprobacion de selector en sesion real pendiente. No se transfieren datos reales a Demo.
+- Alcance: 88 altas activas con nombre, categoria y cuenta de ingreso del Excel; Delivery Miami y SED reutilizan sus registros existentes. Se agregan 90 perfiles y 180 variantes I/E mediante save_service_accounting. Catalogo final: 116 servicios activos; los registros anteriores, sus propiedades fiscales y sus asignaciones se conservan.
+- Fiscal: el propietario confirma que no debe bloquearse la carga esperando clasificacion. La factura ya dispone de checkbox Gravable y selector de tasa por linea. Cada servicio cargado tiene variantes gravada/exenta con la misma cuenta de ingreso; para las altas, taxable=true es el valor inicial administrativo editable del catalogo, no una clasificacion fiscal validada. Costos/gastos quedan sin asignar y los 4 casos con cuentas fuera de ingresos siguen pendientes. No se modifican facturas, borradores, partidas ni correlativos.
+- Archivos/SQL: este registro y evidencia operativa privada ignorada en .ua/intermediate/service-catalog-review-20261030/complete-pending-20261103.cjs, pending-plan-20261103.json, pending-dry-run-20261103.sql, pending-apply-20261103.sql y pending-completion-20261103.json; lecturas independientes y resultados privados en .ua/intermediate/service-account-release-20261029/production-services-pending-*-20261103.json. Sin cambios de esquema, RLS ni frontend; no requiere migracion o despliegue de aplicacion. No versionar fuente, plan ni SQL con datos internos.
+- Integridad/auditoria: transaccion atomica con bloqueo, comparacion exacta contra preflight, auxiliares activas de Ingreso de la misma empresa y guardas de entorno/master; RPC ejecutada con identidad/rol autenticado del responsable configurado. Motivo y auditoria global identifican soporte autorizado por propietario y aclaran que no es accion manual del responsable contable. Fingerprints de 132 tablas ajenas preservados; filas previas de catalogo/perfiles/variantes y cuentas contables intactas.
+- Validaciones: dry-run remoto con rollback OK; aplicacion atomica OK; visibilidad SELECT bajo RLS/rol authenticated para los 90 servicios, 90 perfiles y 180 variantes OK; resolucion servidor de cuenta de ingreso I/E para los 90 OK; lectura remota posterior independiente y aserciones de datos/cuentas anteriores OK; npx.cmd tsc --noEmit OK. No se emitieron documentos de prueba.
+- Pendientes/riesgos: validar selector desde sesion real despues de recargar Facturacion; revisar tratamiento fiscal por linea antes de emitir; 4 excepciones contables y cuentas de costo/gasto pendientes. Registro incluido en commit 30a9f31bde51afd16266f6a152d30c10d14540cc; equivalente documental Demo 698862b730cbfad87ec7b3479b7b0705bcb74af7, sin transferir los datos reales.
+
+### 2026-11-02 - QUAL-QUOTE-SERVICE-01 - Cambio de producto en edicion de cotizaciones
+
+- Estado: publicado en Production y Demo; Quality, SQL/RLS y paridad aprobados. UAT autenticada pendiente.
+- Hallazgo: la regla producto -> transporte/modalidad limitaba esos selectores, pero el selector de producto solo aparecia para Miami. Una LCL de otros origenes no podia corregirse a Aereo Consolidado desde el editor.
+- Archivos: src/app/(protected)/quotations/[id]/edit/page.tsx, src/lib/quotation-edit.ts, tests/quotation-edit.test.mjs y este registro. SQL: ninguno.
+- Cambio: selector Producto / servicio visible para los productos con pricing por agentes, con las opciones activas del catalogo y conservando un producto historico si no aparece en ellas. La seleccion aplica la regla de creacion para transporte y modalidad; LTL/FTL requiere elegir modalidad cuando no corresponde la previa. Miami conserva sus dos opciones y Aduanas su flujo dedicado. No cambia de familia de pricing automaticamente.
+- Integridad: LCL -> Aereo Consolidado conserva todas las lineas y recalcula sus totales al guardar por la RPC atomica existente. Los cambios entre contenedores y carga suelta pasan por la confirmacion existente. Guardar sin tocar la carga sigue omitiendo totales historicos. Se avisa revisar tarifas al cambiar el servicio; no se modifican tarifas, opciones comerciales ni operaciones como efecto lateral.
+- Validaciones: npx.cmd tsc --noEmit OK; npm.cmd test 582/582; npm.cmd run lint:ci 560 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK. Navegador en pagina real con sesion/Supabase simulados: 14 comprobaciones OK, 0 errores JavaScript, sin overflow 1440/390 px y capturas revisadas. Incluye LCL -> Aereo conservando dos lineas en el payload RPC, cambio inverso y confirmacion/cancelacion hacia FCL con bloqueo si faltan contenedores, ademas de las 11 regresiones de edicion/Miami. Reproduccion del caso real mediante lectura exclusiva de producto/estado y cantidades, sin incluir identidad ni datos comerciales en las pruebas; fixture sintetico separado. Evidencias ignoradas en .ua/intermediate/quote-service-*.
+- Publicacion: commit main b1d6a2c73148d634424682243f8d31998df618ad y equivalente Demo 8a308ba4bc10c10a92c647dfc0c22754a8be8ebc. Solo 4 archivos del ajuste; ningun SQL de escritura ni cambio de datos reales.
+- CI: Quality main 41538785621 y Demo 41538820146 aprobados (aplicacion/base); paridad main 41538785573 y Demo 41538820172 aprobada: 586 archivos compartidos, 26 variantes revisadas, 0 diferencias no revisadas.
+- Vercel: Production dpl_4KNFqGv5fndi1KAmDSTH9CEmQ4i7 READY, https://sarierp-an5m6o7u1-claudherhn-5641s-projects.vercel.app, sari.forwarders.app. Demo dpl_BZASCmdHFJ6XMXB24Xd5asEwd2oH READY en Preview, https://sarierp-bk5neah22-claudherhn-5641s-projects.vercel.app, demo.forwarders.app. API verifica SHA exacto y alias; smoke publico login 200, listado/edicion de cotizaciones 307 a login, manifest de cada dominio coincide con su despliegue inmutable.
+- Riesgos / pendientes: UAT autenticada. No se modifica directamente la cotizacion reportada; el cambio se guarda desde su editor. La lectura del caso real confirma dos lineas completas y ausencia de tarifas/operaciones al momento de revisar; el navegador funcional utiliza solo datos ficticios.
+- Commit funcional: b1d6a2c73148d634424682243f8d31998df618ad.
+
+### 2026-11-02 - QUAL-QUOTE-EDIT-01 - Edicion y Miami usan los editores de carga compartidos; validacion de carga por accion
+
+- Estado: publicado en Produccion y Demo; CI Quality y paridad en verde, Vercel OK en ambos. UAT autenticada pendiente.
+- Publicacion: commit funcional main 2ae2b2ec7d4443f23ecf3b0bb5ec4678809eec79; equivalente Demo 29eb42e9194a0f7eba85e66c52a594c258d7ab79 (cherry-pick limpio; en Demo tsc OK y npm test 586/586). La paridad de Demo fue cancelada por el grupo de concurrencia environment-parity y la cubrio la ejecucion de main (exito). UAT autenticada pendiente.
+- Archivos: src/app/(protected)/quotations/[id]/edit/page.tsx, src/components/quotations/MiamiQuotationSection.tsx (1,565 -> 933 lineas), CargoLinesEditor.tsx y ContainerLinesEditor.tsx (prop opcional removalNote), src/app/(protected)/quotations/new/page.tsx (solo deja de pasar props eliminadas), src/lib/quotation-cargo.ts (normalizeLegacyBlankInchLine), nuevo src/lib/quotation-edit.ts (getCargoSignature, planQuotationEditCargo, getEditCargoTotals, getProductRuleMismatch), nuevo tests/quotation-edit.test.mjs (13). SQL: ninguno.
+- Edicion: contenedores y lineas usan ContainerLinesEditor/CargoLinesEditor (etiquetas, lineas incompletas resaltadas, peso volumetrico/cobrable en aereo). En Miami se ocultan Ruta y Carga generales, que duplicaban puerto origen/destino y commodity de la seccion Miami (igual que en creacion; los valores guardados se conservan).
+- Validacion por accion en edicion: Enviar a Pricing exige carga completa; guardar Borrador descarta filas vacias, admite falta de peso y bloquea filas capturadas sin cantidad o volumen; fuera de Borrador con carga modificada exige carga completa; fuera de Borrador con carga intacta (misma modalidad, contenedores y lineas) guarda con aviso sin reemplazar lineas/contenedores ni reenviar totales de carga suelta (jsonb_populate_record de save_quotation_edit conserva las columnas omitidas). Las filas vacias ya no se guardan con ceros.
+- Modalidad vacia: se conserva si ya venia vacia; vaciarla con una modificacion fuera de Borrador (incluido "Ajustar al producto" en LTL/FTL sin elegir modalidad) bloquea el guardado y enfoca el selector. En Borrador se permite, igual que en creacion. Enviar a Pricing sin modalidad se bloquea siempre.
+- Totales de carga en el payload (getEditCargoTotals): sin reemplazo de carga se omiten peso_kg, peso_lbs, volumen_cbm, volumen_ft3 y cantidad_bultos para cualquier estructura, asi la RPC conserva los guardados. Correccion de revision [P2]: una cotizacion historica con modalidad vacia (y FCL/FTL intactos) enviaba peso_lbs/volumen_ft3 en null y los borraba. Con reemplazo: carga suelta recalcula desde las lineas; contenedores conservan el comportamiento anterior.
+- Producto incompatible: guardar conserva el registro historico, pero Enviar a Pricing (boton o dialogo posterior al guardado) se bloquea hasta ajustar transporte y modalidad. Correccion de revision: antes solo se comprobaba que tuvieran valor.
+- Limite por SQL: save_quotation_edit rechaza reemplazar carga suelta por una lista vacia tambien en Borrador; un borrador modificado que solo tiene filas vacias se bloquea con mensaje claro. Permitir borradores sin lineas requeriria migracion (no realizada).
+- Miami: sin cambio de regla comercial. Conserva su validacion por calculadora, sigue excluido de validateCargoLines y siempre reemplaza sus lineas y cargos automaticos como antes. Su editor propio se reemplaza por CargoLinesEditor; los calculos duplicados daban el mismo resultado (diferencia < 1e-6 en pulgadas) y la tarifa ya usaba los totales compartidos.
+- Pulgadas -> metros: el efecto de MiamiQuotationSection que convertia lineas en pulgadas sin medidas ni CBM se ejecutaba en edicion para cualquier producto (la pagina monta tras cargar). Se traslada a la carga de lineas de edicion (normalizeLegacyBlankInchLine); en creacion era no-op y no se aplica.
+- Producto/modalidad: la edicion limita transporte y modalidad a la regla del producto conservando el valor guardado si no coincide. Una cotizacion antigua inconsistente muestra aviso con accion explicita "Ajustar al producto", que pasa por la confirmacion existente si cambia la estructura de carga. No se normaliza al abrir ni se descartan contenedores/lineas al guardar sin ajustar.
+- Validaciones: npx tsc --noEmit OK; npm test 574/574 OK; npm run lint:ci 556 archivos, 215 diagnosticos historicos, 0 regresiones; npm run build OK. Chrome headless con fixture sintetico de edicion (.ua/intermediate/quote-edit-browser-app, driver quote-edit-browser.mjs): 11 comprobaciones OK, 0 excepciones JS, sin overflow 1440/390 px (historica conserva carga/totales con aviso; carga modificada bloqueada; pulgadas->metros; borrador con filas vacias; ajuste explicito de producto; guardar sin ajustar conserva contenedores y no envia totales; envio a Pricing bloqueado con producto incompatible; modalidad vaciada bloqueada; modalidad vacia historica sin claves de totales en el payload; LTL/FTL sin modalidad tras ajustar bloqueado; Miami sin duplicados y reemplazo de lineas). El driver termina con codigo 1 ante cualquier FAIL o error JS (verificado con una falla forzada). Creacion: 12 comprobaciones OK.
+- Correccion de evidencia: los fixtures de navegador no cargaban Tailwind (faltaba postcss.config y @source); las capturas y comprobaciones de overflow de UX-QUOTE-NEW-02 y QUAL-QUOTE-NEW-03 se hicieron sin estilos. Ambos fixtures corregidos; creacion revalidada con estilos (12/12, sin overflow 1440/768/390). Evidencia en .ua/intermediate/quote-edit/ y quote-ux-styled/ (ignorado).
+- Pendiente: UAT autenticada (editar cotizacion historica fuera de Borrador, Miami con tarifas activas, ajuste de producto con datos reales).
+
+### 2026-11-02 - RATE-ACCESS-01 - Permiso individual y auditoria de tarifas de clientes
+
+- Estado: publicado en Production y Demo; SQL, permisos/RLS, CI y paridad verificados. Permiso individual de Zonia habilitado solo en Production. UAT autenticada pendiente.
+- Alcance: Zonia Flores conserva Contabilidad, Aprobado y activa. Solo su perfil recibe la delegacion; otros contadores y cambios de master no heredan el permiso. Admin/Pricing/Ventas conservan su acceso. No se alteran importes ni cotizaciones existentes.
+- Archivos: src/app/(protected)/clientes/[id]/page.tsx, src/hooks/useClientRateAccess.ts, src/components/clientes/ClientRateHistory.tsx, src/lib/client-rate-history.ts, src/lib/permissions.ts, tests/client-rate-access-history.test.mjs, scripts/validate-audit-sql.mjs, supabase/tests/client_rate_access_and_audit.sql y este registro.
+- SQL: nuevas migraciones 20261102183000_client_rate_access_and_audit.sql y 20261102190000_client_rate_audit_insert_guard.sql. Tabla de delegaciones sin escritura API; permiso aprobado/activo limitado por tenant y cliente. Se conserva replace_client_rates atomica. Trigger registra autor real, fecha, destino y snapshots antes/despues en activity_logs para INSERT/UPDATE/DELETE, incluso DML directo. Un fallo del registro revierte la tarifa. RLS impide editar/borrar y falsificar acciones/origen canonicos desde la API.
+- Consulta: Clientes > cliente > Tarifas muestra historial paginado. Agrupa delete/insert de un reemplazo y omite guardados identicos sin eliminar los eventos originales. Expone solo el cliente y tenant autorizados. Respuestas de permiso/historial obsoletas se descartan al cambiar usuario/cliente. Cero no equivale a ausencia. Sin backfill de cambios historicos ni recalculo de cotizaciones.
+- Validacion local: npx.cmd tsc --noEmit OK; npm.cmd test 580/580 OK (incluye 13 pruebas sin confirmar de Claude y 6 nuevas de este cambio); npm.cmd run lint:ci, 560 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK. SQL/RLS en contenedor aislado: permisos, RPC, tenants, auditoria directa, fallo atomico, inmutabilidad/falsificacion, cuenta inactiva/pendiente, anonimo y regresion AUD-01 OK. Fixtures con rollback, sin tocar la base normal de desarrollo.
+- Navegador: 5 comprobaciones OK y 0 errores JavaScript en pagina real con usuario/Supabase simulados: guardar con autor/antes/despues, paginacion, consulta sin permiso, error/reintento y sin desbordamiento 1280/768/390 px. Fixture compilado y CSS real; no certifica sesion de Zonia. Evidencias privadas .ua/intermediate/client-rates-* ignoradas.
+- Production: ensayo rollback y aplicacion transaccional de ambas migraciones con fuente exacta registrada; delegacion de Zonia separada del SQL compartido y registrada como operacion autorizada, sin suplantar su autoria. Postflight confirma 1 delegado, rol intacto, permiso efectivo y trigger. Las 455 tarifas conservan huella 7839e818fe0b7de2c6cedb0f5d473468. No se realizaron escrituras de tarifas reales de prueba.
+- Publicacion: commit funcional main fce5826320602446ea40e3d26aa2cefe2c7cee0c; equivalente Demo 573f1fa y runner de sesiones temporales 3e8b60650e221e9eb89978ae630ce193535ee951. Solo los 11 archivos propios; 8 archivos y entrada QUAL-QUOTE-EDIT-01 de Claude conservados sin incluirlos. Demo aplica ambas migraciones con fuente exacta, cero delegados y sus 3 tarifas intactas (huella e7e36d0fcdd3172ae30bd014ca7b7877).
+- CI limpio: Quality main 41518022777 y Demo 41518190131, aplicacion y SQL/RLS aprobados; paridad main 41518022721 y Demo 41518190134 aprobada, 585 archivos compartidos, 26 variantes revisadas, 0 diferencias no revisadas. Main: 567/567 pruebas, lint 557 archivos, 222 diagnosticos historicos, 0 regresiones. La cuenta local de 580 incluia las 13 pruebas sin confirmar de Claude.
+- Vercel: Production dpl_8M6Y2oaKL5TbLEbTCJcd1zG3sUZ8 READY, https://sarierp-76gz21z3m-claudherhn-5641s-projects.vercel.app, sari.forwarders.app. Demo dpl_DzmrwKRWewveg4T9oSBtDXVvtk3a READY en Preview, https://sarierp-156z9bk6y-claudherhn-5641s-projects.vercel.app, demo.forwarders.app. API confirma SHA funcional exacto; los dominios sirven el mismo manifest del despliegue inmutable. Smoke publico: login 200, listado/perfil de Clientes 307 a login en ambos ambientes. No certifica UAT autenticada.
+- Pendiente: UAT con sesion real de Zonia para editar una tarifa autorizada y consultar su historial; no se declara completado ese recorrido. Auditoria disponible desde activacion; sin reconstruir cambios anteriores.
+- Commit funcional: fce5826320602446ea40e3d26aa2cefe2c7cee0c.
+
+
+### 2026-11-02 - PNOTE-03 - Notas internas en todos los servicios con tarifas de agentes
+
+- Estado: publicado y verificado en Produccion y Demo; CI de aplicacion/base y paridad en verde. UAT autenticada pendiente.
+- Hallazgo: despues de habilitar Aereo Consolidado, Courier, LTL, FTL y servicios personalizados seguian sin campo, visualizacion ni inclusion de internal_notes en el payload de tarifa.
+- Archivos: src/app/(protected)/pricing-comparison/page.tsx, tests/agent-quote-notes-pdf.test.mjs y este registro. SQL: ninguno.
+- Cambio: se retira la lista de modalidades permitidas para notas; toda tarifa del comparativo admite capturar, guardar, consultar, editar y vaciar agent_quotes.internal_notes, incluido un servicio personalizado. Conserva el componente y los permisos existentes de Admin/Pricing en Pendiente de Fijar Precios, asi como la separacion de client_notes comerciales y pricing_notes de Ventas.
+- Alcance verificado en codigo: Miami LCL/aereo y Aduanas ocultan todo el comparativo porque usan cargos propios; sus observaciones comerciales client_notes siguen disponibles en Cierre y aparecen en PDF. No se presentan esas observaciones como notas internas por tarifa ni se crean tarifas de agentes para estos flujos.
+- Validaciones: npx.cmd tsc --noEmit OK; npm.cmd test 571/571 OK, con PDF real que excluye notas internas/proveedor y conserva client_notes para FCL, LCL, Consolidado, Courier, LTL y FTL; npm.cmd run lint:ci 556 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK.
+- Navegador: 12 comprobaciones OK, 0 excepciones JS en pagina real con sesion/Supabase simulados y fixture compilado para evitar recargas del servidor de desarrollo. FCL, LCL, Aereo Consolidado, Courier, LTL, FTL y personalizado guardan notas independientes desde tarjeta y formulario; payload de nota limitado a internal_notes e IDs correctos. Alta nueva Courier conserva la nota. CSS real con PostCSS/Tailwind y @source explicito, campo compacto verificado a 1280/768/390 px. Miami LCL/aereo y Aduanas guardan sus observaciones comerciales. Evidencia privada .ua/intermediate/notes-all-browser-report.json y capturas notes-all-* (ignorados). git diff --check OK.
+- Publicacion: commit funcional main 1c929318d9012c5dd432a94338dd81a292b688d9; equivalente Demo 72e4d8d66bae9dbef7fefa46b723224151788f10. Ambos contienen solo esta pagina, sus pruebas PDF y las entradas PNOTE de este registro. El commit main y una copia limpia del mismo excluyen los cambios sin confirmar de Claude; sus 8 archivos y su entrada QUAL-QUOTE-EDIT-01 conservan las huellas previas.
+- CI sobre el commit limpio: Quality main 41484548954 y Demo 41485119170 success (aplicacion y base/SQL/RLS); paridad main 41484549214 y Demo 41485119371 success. Produccion ejecuta 561/561 pruebas; las 571 locales anteriores incluian 10 pruebas aun sin confirmar de Claude. Lint CI main: 553 archivos, 222 diagnosticos historicos, 0 regresiones. Paridad: 580 archivos compartidos, 26 variantes revisadas, 0 diferencias no revisadas.
+- Vercel: Produccion dpl_FSyiY1rNM2chruxChfcXP4j4f51z READY, https://sarierp-9yh1nbrv4-claudherhn-5641s-projects.vercel.app, dominio sari.forwarders.app; Demo dpl_2KUWixnximHYnduVYgEKPd6cJeSM READY en Preview, https://sarierp-mmh2n8jf7-claudherhn-5641s-projects.vercel.app, dominio demo.forwarders.app. Metadatos de ambos despliegues coinciden con sus commits funcionales. Sin variables, credenciales o datos copiados entre ambientes.
+- Smoke posterior en ambos dominios: /login 200 y /pricing-comparison 307 a /login?next=%2Fpricing-comparison, sin sesion ni escrituras. Evidencia privada notes-release-ci.json, notes-release-smoke.json y notes-release-provenance.json en .ua/intermediate/.
+- Pendientes: UAT autenticada de los servicios habilitados. No cambia esquema, RLS, costos ni estados; no se aplico SQL remoto. Cambios paralelos de Cotizaciones preservados.
+
+### 2026-11-02 - PNOTE-02 - Notas internas por tarifa de Aereo Consolidado
+
+- Estado historico: fase inicial integrada en PNOTE-03; publicacion y hashes finales registrados alli. UAT autenticada pendiente.
+- Hallazgo: Pricing Comparison limitaba a FCL/LCL el campo de notas internas, su inclusion en el payload de alta/edicion y su visualizacion en tarjetas; Aereo Consolidado no tenia la misma opcion.
+- Archivos: src/app/(protected)/pricing-comparison/page.tsx, tests/agent-quote-notes-pdf.test.mjs y este registro. SQL: ninguno; reutiliza agent_quotes.internal_notes y AgentQuoteNotes existentes.
+- Cambio: una condicion compartida habilita las notas para FCL/LCL y transporte Aereo con modalidad Consolidado. Permite capturarlas al crear/editar la tarifa y agregar/editar/vaciar la nota desde su tarjeta. Conserva permisos y validacion existentes de Admin/Pricing en Pendiente de Fijar Precios; las notas siguen visibles como consulta en otros estados y fuera del PDF comercial.
+- Validaciones ejecutadas: npx.cmd tsc --noEmit OK; npm.cmd test 568/568 OK, incluida la nueva cobertura de PDF aereo real que conserva client_notes y excluye notas internas y proveedor; npm.cmd run lint:ci 556 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK; git diff --check OK.
+- Navegador: pagina real con Supabase/sesion simulados, 9 comprobaciones OK y 0 excepciones JS en la pasada final. Aereo: nota independiente por opcion, precarga y guardado desde formulario completo, modal a 390 px con Escape y devolucion del foco, campo compacto dentro de 1280/768 px, lectura sin accion de edicion para Ventas y Pricing Aprobado. Regresion FCL: guardar solo la nota sin repricing, recuperacion de error, tabla, vaciar a NULL e impresion interna. Evidencia privada: .ua/intermediate/notes-air-browser-report.json y capturas notes-air-* (ignorados).
+- Riesgos/pendientes: UAT autenticada del guardado y persistencia con RLS real. No cambia esquema, permisos, costos ni calculos de peso/flete. Cambios paralelos de Cotizaciones fuera del alcance y preservados. Commit final: 1c92931 (PNOTE-03).
+
+### 2026-10-30 - OPS-TEST-CLEANUP-1081-01 - Limpieza excepcional confirmada de prueba interna
+
+- Estado: aplicada y verificada en Produccion. El propietario confirma expresamente que 001-001-11-00001081 fue prueba interna no entregada ni declarada/reportada al SAR; solicita eliminar el dato y rehabilitar 1081, retirando la solicitud pendiente creada en OPS-VOID-TEST-1081-01.
+- Sin pagos, NC/ND, retenciones, partida contable ni otros documentos de la serie. Respaldo tecnico privado previo conservado. Transaccion exclusiva y acotada retira boleta, AP, solicitud Pendiente e historial financiero exclusivo de la prueba; devuelve next_number de SPS 1082 a 1081. No crea anulacion fiscal. Se conserva activity_logs tecnico de soporte y evento de correccion CAI; no se atribuye aprobacion a Zonia.
+- Controles excepcionales suspendidos solo dentro de la transaccion bloqueada, restaurados antes de confirmar; comparacion completa de definiciones/estados de triggers intacta. Sin cambios permanentes de esquema, funciones, RLS ni permisos. Resto de tablas y filas preservadas mediante fingerprints.
+- Validaciones: dry-run con rollback OK, aplicacion atomica OK, postflight independiente confirma cero boleta/AP/solicitud/historial de prueba y siguiente 1081. Prueba de allocator devuelve exactamente 001-001-11-00001081 dentro de savepoint revertido, sin consumo de numeracion ni documento nuevo. No requiere despliegue de frontend. Evidencia privada .ua/intermediate/void-test-purchase-1081-20261030/ ignorado; commit documental pendiente.
+
+
+### 2026-10-30 - OPS-VOID-TEST-1081-01 - Solicitud de anulacion de boleta de prueba
+
+- Estado historico: solicitud registrada inicialmente; posteriormente retirada mediante limpieza de prueba interna expresamente confirmada por el propietario, documentada en OPS-TEST-CLEANUP-1081-01. Sin aprobacion atribuida a Zonia.
+- Operacion de soporte autorizada expresamente por propietario, RPC request_fiscal_void bajo contexto del Admin emisor, motivo explicito de soporte y activity_logs adicional con user_id null. Resguardo original/copia preguntado al propietario; no se afirma confirmacion ni aprobacion.
+- Validaciones: dry-run con rollback, aplicacion atomica y postflight independiente OK. Boleta, cuenta por pagar y fingerprint de rangos CAI intactos. Siguiente SPS 1082; 1081 no liberado para duplicar numeracion fiscal. No cambia esquema ni codigo. Evidencia privada .ua/intermediate/void-test-purchase-1081-20261030/ ignorado.
+- Resolucion: reemplazada por OPS-TEST-CLEANUP-1081-01; no queda solicitud pendiente ni anulacion fiscal. Commit documental junto al cambio de Compras.
+
+
+### 2026-10-30 - UX-PURCHASE-PAYMENTS-MODAL-01 - Saldo y pagos sin abandonar Compras
+
+- Estado: implementado y validado localmente main/demo; publicacion autorizada en curso, UAT autenticada pendiente.
+- Archivos: accounting/purchases/page.tsx convierte ambos accesos Saldo y pagos a modal, conservando filtros/pagina y refrescando recursos al cerrar. SupplierPayableDetail.tsx extrae el contenido de accounts-payable/[id]/page.tsx; la ruta sigue disponible y ambos usan los mismos saldos canonicos y RPC de pagos/NC/ND/reversiones, sin cambios SQL/RLS. SupplierPayableDialog.tsx usa Dialog accesible, ancho limitado y scroll movil, enlace al detalle completo, retorno de foco al listado y bloqueo de cierre durante mutaciones.
+- Validaciones: 13 regresiones del flujo financiero + 1 de cierre durante transaccion OK. Navegador sintetico 1280/390: misma URL, filtros conservados, pago ficticio actualiza saldo/historial, Escape cierra solo NC/ND anidado, foco vuelve al listado y apertura desde Ver/PDF funciona sin apilar los modales principales. Incidencia conocida HMR local en evidencia privada; no se registran pagos ni documentos reales.
+- Validacion final: npm test 557/557 OK en main; TypeScript main/demo OK; lint de archivos afectados sin diagnosticos; build main OK. Demo 14/14 regresiones financieras y modal OK. Sin cambios de esquema ni datos remotos.
+- Evidencia: .ua/intermediate/purchase-payments-modal-20261030/ ignorado. Commit: pendiente.
+
+
+
+### 2026-10-30 - FISCAL-PURCHASE-CONTACT-01 - Datos de proveedor opcionales en boleta
+
+- Estado: migracion aplicada y verificada en Produccion/Demo; interfaz y fixture SQL validados; publicacion autorizada en curso.
+- Archivos: accounting/purchases/page.tsx elimina required de domicilio y telefono del proveedor; migracion nueva 20261030213000_purchase_optional_supplier_contact.sql elimina solo ese bloqueo en create_purchase_document. No modifica migracion ya aplicada, emisor, CAI, permisos ni documentos historicos. Fixture purchase_optional_supplier_identity.sql comprueba emision sin identidad/domicilio/telefono con CAI conservado y transaccion revertida.
+- Validaciones: SQL production/trial aislado con rollback OK; aplicacion remota y registro exacto verificados, fingerprints de tablas y funciones fiscales ajenas intactos. TypeScript y lint OK. Navegador sintetico 1280/390 confirma campos opcionales y PDF en pestana separada; incidencia de HMR local documentada en evidencia privada. UAT autenticada pendiente. Commit: pendiente.
+
+
+### 2026-10-30 - UX-PURCHASE-PRINT-01 / FISCAL-PURCHASE-IDENTITY-01 - Impresion y RTN opcional en boleta
+
+- Estado: migracion aplicada y registrada en Produccion/Demo; interfaz implementada main/demo; publicacion autorizada en curso, UAT autenticada pendiente.
+- Migracion nueva: supabase/migrations/20261030210000_purchase_optional_supplier_identity.sql. Solo elimina obligatoriedad de identidad del proveedor en Boleta de Compra; domicilio/telefono, CAI, permisos, cuentas y validaciones de importes se conservan. Identidad disponible se congela en snapshot, ausencia queda null sin inventar valores. Facturas de clientes y retenciones mantienen sus funciones/reglas vigentes, hashes verificados.
+- UI: accounting/purchases agrega Imprimir junto a Descargar PDF y RTN/identidad opcional. PdfPrintButton genera al clic, reserva pestana antes de await, separa opener, evita doble envio, atiende popup bloqueado y errores; mantiene URL al cerrar modal y libera al cerrar pestana o vencer el plazo de limpieza. Descarga existente intacta. purchase-documents admite rtn null.
+- Validaciones: 12 pruebas PDF/impresion/descarga OK, incluido PDF sin identidad; fixture SQL purchase_optional_supplier_identity OK en schemas production/trial con rollback. TypeScript, lint de archivos afectados y build OK. Dry-run/aplicacion remota atomicamente verificados con fingerprints de todas las tablas intactos; no emite documentos reales ni consume correlativos. Runners SQL actualizados.
+- Evidencia privada en .ua/intermediate/purchase-print-optional-20261030/ y purchase-office-error-20261030/ (ignorado). Pendiente publicacion y UAT navegador autenticado. Cambios paralelos de Cotizaciones preservados y fuera de alcance.
+
+
+### 2026-10-30 - DATA-SPS-FISCAL-EMAIL-01 - Correo faltante de oficina bloqueaba boleta
+
+- Estado: corregido y verificado en Produccion. El CAI de Boleta estaba activo; fiscal_office_snapshot rechazaba la oficina SPS por correo vacio. Domicilio, telefono y codigos SAR completos.
+- Por confirmacion expresa del propietario, SPS usa el correo de la cuenta activa/aprobada de Zonia verificada en Auth y profiles del tenant Sari. Solo cambia billing_offices.email; registro en activity_logs con autor operativo de soporte y confirmacion del propietario. Sin cambios de esquema, frontend, permisos o documentos anteriores.
+- Evidencia privada en .ua/intermediate/purchase-office-error-20261030/ (ignorado). Validacion con rollback OK, aplicacion atomica OK, fiscal_office_snapshot retorna emisor valido con correo esperado y lectura independiente confirma persistencia. Fingerprint de todos los rangos CAI intacto, sin consumo de correlativos ni emision de documento.
+- Usuario confirma emision real mediante captura posterior; el soporte no emitio ese documento. No requiere despliegue. Cambios paralelos de Cotizaciones fuera de este alcance y preservados.
+
+
+### 2026-10-30 - QUAL-QUOTE-NEW-03 - Nueva cotizacion dividida en secciones reutilizables
+
+- Estado: refactor sin cambio funcional, validado localmente con pruebas y navegador sobre fixture sintetico; sin commit ni publicacion. UAT autenticada pendiente junto con UX-QUOTE-NEW-01/02.
+- Archivos: src/app/(protected)/quotations/new/page.tsx (2,659 -> 1,292 lineas; conserva estado, carga de catalogos, duplicado/reactivacion, payload, PDF y envio). Nuevos en src/components/quotations/: QuotationClientProductSection, QuotationContactSection, QuotationConditionsSection, QuotationRouteSection, QuotationCargoSection, CargoLinesEditor, ContainerLinesEditor, QuotationInsuranceSection, QuotationNotesSection, QuotationActionBar, DuplicateCargoNotice. Nuevo src/lib/quotation-form.ts (formulario inicial, Incoterms, etiquetas/filtro de ruta, ContainerLine y collectQuotationSubmitIssues puro); createEmptyCargoLine pasa a src/lib/quotation-cargo.ts. Pruebas: tests/quotation-form.test.mjs (6 nuevas); tests/page-harness.mjs gana la opcion opt-in `expand` para renderizar en linea secciones sin estado, usada por tests/miami-insurance-create.test.mjs. SQL: ninguno.
+- CargoLinesEditor y ContainerLinesEditor encapsulan su confirmacion de borrado y el formulario de alta/edicion de contenedores (conserva el nombre de un tipo retirado del catalogo al editar). Estan listos para que edicion y Miami dejen sus copias propias del editor; no se migraron en esta fase.
+- Validaciones: npx tsc --noEmit OK; npm test 550/550 OK; npm run lint:ci 549 archivos, 222 diagnosticos historicos, 0 regresiones; npm run build OK. Chrome headless (fixture .ua/intermediate/quote-ux-browser-app, driver quote-ux-browser.mjs ampliado): 12 comprobaciones OK, 0 excepciones JS, sin overflow en 1440/768/390 px; incluye agregar/modificar/quitar contenedores y quitar lineas con y sin confirmacion. Capturas en .ua/intermediate/quote-ux-phase3/ (ignorado).
+- Hallazgo pendiente (no corregido): /quotations/[id]/edit guarda todas las lineas de carga suelta sin validar ni filtrar (cantidad/volumen/peso en cero) y solo exige que exista una fila. Requiere decidir la regla por estado antes de aplicar validateCargoLines alli.
+
+### 2026-10-30 - UX-QUOTE-NEW-02 - Nueva cotizacion: producto primero, validez unica y validacion agrupada
+
+- Estado: implementado y validado localmente con navegador sobre fixture sintetico; sin commit ni publicacion. UAT autenticada pendiente.
+- Archivos: src/app/(protected)/quotations/new/page.tsx, src/components/quotations/MiamiQuotationSection.tsx, src/components/quotations/CustomsQuotationSection.tsx, src/app/(protected)/quotations/[id]/edit/page.tsx (solo deja de pasar la prop eliminada), src/app/(protected)/pricing-comparison/page.tsx (usa el helper compartido de peso aereo, mismo calculo), src/lib/quotation-cargo.ts, tests/quotation-cargo-validation.test.mjs, tests/miami-insurance-create.test.mjs (texto del boton). SQL: ninguno.
+- Estructura: "Cliente y producto" (FormSection/FormField) va primero; sin producto solo se muestran cliente/contacto y un EmptyState. "Condiciones del servicio" agrupa transporte, modalidad, Incoterm y una unica Valida hasta para todos los productos (se elimina el campo repetido en la seccion Miami, que tambien se veia doble en edicion, y el de Aduanas). Fecha de creacion pasa al encabezado en DD/MM/YYYY.
+- Contexto por transporte/Incoterm: Puerto/Aeropuerto/Ciudad, carrier/aerolinea/transportista y sugerencias de ports filtradas por type (Puerto, Aeropuerto, Ciudad/Frontera; si no hay coincidencias se ofrecen todas). Recoleccion solo con EXW/FCA y entrega solo con DAP/DDP (siguen visibles si ya tienen texto). Target rate con NumberInput.
+- Carga: contenedores con etiquetas visibles; cada linea suelta elige Caja/Pallet/Pieza; en aereo se muestran peso volumetrico (CBM x 166.67, divisor IATA 6000 ya usado por Pricing, ahora en getAirChargeableWeights) y peso cobrable.
+- Envio: todas las faltas se reunen en un solo aviso, se resaltan y se enfoca la primera. Borrador ya no exige Incoterm (sigue exigiendo cliente, direccion y producto). Validez se compara como fecha local YYYY-MM-DD. Barra de acciones fija con resumen (producto, modalidad, Incoterm, ruta, carga/peso cobrable). "Guardar cotizacion" pasa a "Guardar borrador". Tras crear navega a /quotations/[id] y mantiene los botones bloqueados durante la navegacion.
+- Miami: un solo aviso de tarifas cuando falta cliente; titulo del flujo rapido como h3. Aduanas usa FormSection/FormField con asterisco rojo.
+- Validaciones: npx tsc --noEmit OK; npm test 544/544 OK; npm run lint:ci 536 archivos, 222 diagnosticos historicos, 0 regresiones; npm run build OK. Chrome headless con fixture sintetico (.ua/intermediate/quote-ux-browser-app, driver quote-ux-browser.mjs): 10 comprobaciones OK y 0 excepciones JS (sin producto, FCL, validacion agrupada con foco, aereo con peso cobrable y envio de 1 linea, redireccion, LTL/FTL, borrador, duplicado inconsistente, Aduanas y Miami). Sin overflow en 1440/768/390 px. Capturas en .ua/intermediate/quote-ux/ (ignorado).
+- Pendientes: UAT autenticada con datos reales (catalogo ports con tipos reales, clientes con tarifas Miami activas y flujo completo hasta Pricing). Miami se reviso con calculadora deshabilitada (fixture sin tarifas). La division del archivo en componentes por plantilla queda como trabajo separado.
+
+### 2026-10-30 - UX-QUOTE-NEW-01 - Producto define transporte/modalidad y seguro coherente en nueva cotizacion
+
+- Estado: implementado y validado localmente; sin commit ni publicacion. Revision visual en navegador y UAT autenticada pendientes (solo inspeccion de codigo y pruebas).
+- Hallazgos: (1) en /quotations/new solo Aereo Consolidado y Miami fijaban transporte/modalidad; se podia crear FCL Otros Origenes como Aereo/Courier o LTL/FTL USA como Maritima. (2) Sin modalidad, Carga mostraba container_type/container_qty legacy junto a peso/CBM/bultos que desaparecian al elegirla. (3) Fuera de Miami el seguro capturaba commercial_value pero el calculo y el payload usaban fob_value, que ninguna pantalla llenaba: se guardaba fob_value 0 e insurance_cost 0 (o el de la cotizacion duplicada) con texto "se calculara sobre el valor FOB". Pricing ya calcula con commercial_value || fob_value, por lo que no habia perdida del valor comercial.
+- Archivos: src/lib/quotation-products.ts (getProductTransportRule, resolveProductQuoteType), src/app/(protected)/quotations/new/page.tsx, tests/quotation-product-transport.test.mjs y este registro. SQL: ninguno.
+- Cambio: FCL/LCL/Aereo Otros Origenes y Courier fijan transporte y modalidad (selects bloqueados con aviso); LTL/FTL USA fija Terrestre y limita la modalidad a LTL/FTL; productos personalizados del catalogo conservan seleccion libre. Cambiar a un producto cuya modalidad no sea FCL/FTL pide confirmacion antes de quitar contenedores (antes solo Miami/Aduanas). Tras Aduanas se restablece una linea de carga. Carga sin modalidad muestra estado vacio; empaque/peso/CBM/bultos quedan solo para FCL/FTL. Seguro requerido guarda fob_value = valor comercial en todos los productos; insurance_cost fuera de Miami se guarda 0 (lo calcula Pricing); se elimina calculo muerto y se corrige el texto.
+- Duplicar/reactivar: si la cotizacion origen trae transporte/modalidad incoherentes con su producto, se normalizan con la misma regla al cargarla (LTL/FTL USA conserva LTL o FTL; otro valor queda vacio para elegir).
+- Revision (P1, reproducido por revisor): la normalizacion podia descartar carga sin aviso (origen LCL-producto/FCL-modalidad con 2 contenedores y 2,000 kg se copiaba como LCL sin contenedores, lineas ni peso). Correccion: summarizeUncarriedCargo (src/lib/quotation-cargo.ts) lista lo que la estructura destino no conserva (contenedores, lineas, totales legacy sin lineas, container_type legacy); la copia muestra aviso persistente (role=alert) y toast de advertencia, no arrastra contenedores ocultos a carga suelta y parte con una linea vacia que la validacion obliga a completar. El original no se modifica.
+- Revision (P1, preexistente): carga suelta se enviaba a Pricing con cargo: [] porque la validacion contaba filas y el payload descartaba las incompletas. Correccion: validateCargoLines valida las mismas lineas que se envian. Pricing exige al menos una linea con cantidad, volumen (dimensiones o CBM manual) y peso, y senala toda linea parcial; Borrador acepta filas vacias/sin peso pero bloquea lineas con datos que se descartarian (sin cantidad o volumen). Lineas invalidas se resaltan en rojo con el dato faltante y se actualizan al corregirlas. Miami conserva su validacion por calculadora.
+- Validaciones: npx tsc --noEmit OK; npm test 543/543 OK (11 pruebas nuevas en quotation-product-transport y quotation-cargo-validation, incluidos ambos escenarios reportados); npm run lint:ci 536 archivos, 222 diagnosticos historicos, 0 regresiones; npm run build OK.
+- Pendientes: revision visual con navegador de cada producto (FCL, LCL, Aereo, Courier, LTL/FTL, Miami, Aduanas) y UAT de duplicar/reactivar cotizaciones antiguas. Fase siguiente propuesta: producto primero, Validez unica, etiquetas por transporte/Incoterm, resumen lateral y validacion agrupada.
+
+### 2026-10-30 - SUP-DEFAULT-ACCOUNT-01 - Proveedores categorizados y cuenta de gasto predeterminada
+
+- Estado: migracion aplicada y registrada en Produccion/Demo; datos actualizados y verificados solo en Sari Produccion; UI main/demo validada; publicacion autorizada en curso, UAT autenticada pendiente.
+- Migracion: supabase/migrations/20261030193000_supplier_default_expense_account.sql. Campos direccion y default_expense_account_id, FK compuesta tenant/cuenta, validacion de auxiliar activa de Costo/Gasto y auditoria del cambio. No cambia permisos RLS ni habilita cuentas de otras empresas.
+- Compras nuevas: prioridad cuenta explicita de linea > cuenta del servicio > cuenta del documento (incluye desactivar default con null explicito) > cuenta del proveedor. Las AP manuales nuevas heredan default salvo override; las AP de documentos multilinea y NC/ND conservan su tratamiento. No reescribe documentos, partidas ni saldos previos.
+- UI: SupplierExpenseAccountSelect, SupplierForm, suppliers/[id], accounting/purchases y helper supplier-accounting. Busqueda por codigo/nombre; selector compacto. Cambiar proveedor/default del documento actualiza solo lineas que seguian el default, conservando overrides manuales/servicios. Direccion estructurada en perfil.
+- Datos privados: Resumen proveedores categorizado.xlsx, 125 filas para 124 IDs existentes. Gomez Vega consolidado; 11 tipos nuevos, 124 cuentas asignadas y 50 direcciones estructuradas. Nombre, RTN completo, moneda y condiciones anteriores preservados; blancos no borran datos. Combinacion Sari Express/Transporte conservada por confirmacion expresa. Retencion fuente retenida sin inferir politica automatica. No hay nuevos proveedores ni datos reales transferidos a Demo.
+- Evidencia/SQL operativo privado: .ua/intermediate/supplier-categorized-20261030/ (ignorado; no versionar PII). Migracion y carga dry-run rollback OK; aplicacion atomica y lectura independiente posterior OK. Fingerprints de tablas ajenas y cuentas intactos.
+- Validaciones: pruebas SQL locales production/trial supplier_default_expense_account OK; regresiones service_accounting_assignments y supplier_type_catalog OK. 532 pruebas Node OK, TypeScript OK, ESLint de archivos afectados OK, build Produccion OK. Fixtures y runners SQL actualizados.
+- Infra: Docker recuperado con Continue del aviso de actualizacion previa fallida; sin borrar volumenes ni datos. Solo contenedor de replay iniciado para pruebas.
+- Revision visual sintetica de proveedor/compras OK en 1623/1280/768/390 px; herencia y override por linea comprobados en navegador. Publicacion autorizada en curso; UAT autenticada pendiente.
+
+
+### 2026-10-30 - ACC-SERVICE-IMPORT-01 - Concepto unico y checkbox Exento de ISV
+
+- Estado: carga parcial aplicada/verificada en Produccion; UI validada main/demo, publicacion autorizada en curso; UAT autenticada pendiente. Datos reales no transferidos a Demo.
+- Archivo actualizado trae 100 filas, 99 conceptos unicos al consolidar Desconsolidacion con su variante I; no se crean codigos de servicio duplicados por I/E. Fuente/datos/SQL y evidencia privados en .ua/intermediate/service-catalog-review-20261030/ (ignorado).
+- 4 altas exentas (Bunker, Emergency Bunker, GRI, Insurance) y actualizacion del cargo Desconsolidacion existente a gravable, segun marca explicita I del archivo. Un perfil por concepto, cuenta de ingreso del archivo enlazada a variantes I/E sin cambiar la naturaleza de esa cuenta; costos pendientes. No altera documentos/pricing items historicos.
+- Por confirmacion expresa: 90 conceptos sin marca fiscal quedan pendientes sin importacion/activacion, y 4 casos contables fuera de ingresos quedan pendientes. Reporte privado pending-services.csv.
+- UI: src/app/(protected)/catalogs/page.tsx, checkbox Exento de ISV controla el inverso del campo taxable existente; lista identifica gravado/exento. No migra esquema ni cambia politica RLS. Perfil master contable figura como responsable de asignaciones; motivo RPC y auditoria separada indican importacion automatizada por soporte autorizada por propietario, no accion manual de Zonia.
+- Validacion: rollback remoto OK, aplicacion atomica OK, fingerprints de tablas ajenas preservados, lectura independiente de 5 perfiles/10 variantes y cuentas contables intactas OK. TypeScript y 5 pruebas service-accounting OK; lint:ci 531 archivos, 223 diagnosticos historicos, 0 regresiones (catalogos mantiene set-state-in-effect preexistente); build OK.
+- Pendiente: clasificacion fiscal por Zonia, 4 excepciones y auxiliares de costo/gasto; publicacion del checkbox y UAT autenticada. Revision visual sintetica en 1623/1280/768/390 px OK; guardado true/false verificado sobre un unico concepto.
+
+
+### 2026-10-30 - DATA-CLIENT-IMPORT-03 - Cierre de clientes y control de RTN
+
+- Estado: aplicado y verificado en Produccion. CBM completado sobre perfil existente, sin duplicarlo; Distribuidora de Todo creada por autorizacion expresa sin nit/rtn, oficina TGU segun ciudad y Contado/0 dias/HNL. No se reutiliza el RTN de Swissport.
+- Carga del Excel sin filas pendientes; queda completar RTN propio de Distribuidora antes de emitir. Evidencia privada en .ua/intermediate/client-import-20261030/last-completion.json y SQL last-dry-run/last-apply (ignorado; no versionar PII).
+- Bloqueo ya existente en create_invoice_office_base: exige RTN para documento fiscal antes del correlativo; cadena vigente issue_invoice_draft -> create_manual_invoice_with_items -> create_invoice_with_items_trusted -> create_invoice_fiscal_base -> create_invoice_office_base. RPC de emision directa revocadas a authenticated; se conserva esa proteccion. Sin migracion ni cambio de aplicacion requerido.
+- Validaciones: dry-run carga OK; prueba real con rol authenticated/Admin de save_invoice_draft e issue_invoice_draft rechaza por RTN, todo con rollback; aplicacion atomica OK y lectura independiente compara cambios y preservacion de 395 perfiles anteriores OK. Tablas ajenas preservadas. Total 396 registros Sari, incluyendo perfiles previamente eliminados sin reactivar.
+- Solo HARDENING modificado. UAT de interfaz pendiente; no requiere despliegue frontend.
+
+
+### 2026-10-30 - DATA-CLIENT-IMPORT-02 - Correspondencias confirmadas por propietario
+
+- Estado: aplicado y verificado en Produccion. Datos reales solo en Sari; sin cambios de esquema/RLS/frontend.
+- SQL y evidencia privados en .ua/intermediate/client-import-20261030/: resolve-dry-run/resolve-apply, final-dry-run/final-apply y final-completion.json. No versionar SQL con nombres, direcciones, RTN o contactos.
+- Segunda fase: 2 altas y 12 perfiles existentes completados/renombrados por instrucciones explicitas; tercera fase: Soluciones Integrales creada como empresa distinta de AGROIN, Turcios asociado al perfil existente confirmado. Aliases separados por pleca donde se solicito.
+- M & D Import: existe un perfil activo y otro previamente eliminado; se completa solo el activo, sin restaurar, borrar ni fusionar historiales. Swissport usa su fila propia y denominacion confirmada; no toma la direccion de Distribuidora de Todo cuyo RTN estaba mal asignado.
+- Total acumulado de la importacion: 318 nuevos, 35 perfiles existentes enriquecidos; 395 clientes Sari incluyendo registros anteriores. Identificadores, saldos, oficinas y condiciones de credito existentes preservados; solo renombres autorizados. Nuevos con Contado/0 dias/limite 0/HNL y oficina segun regla confirmada.
+- Pendientes finales: 2 filas, Distribuidora de Todo (confirmar RTN propio) y CBM Intl Freight (confirmar correspondencia). Reporte privado pending.csv actualizado; version inicial conservada.
+- Validaciones: ambos lotes dry-run con rollback OK, aplicacion atomica OK, fingerprints de tablas ajenas intactos, comparacion independiente de todos los clientes y campos de las tres fases OK; TypeScript OK. UAT autenticada pendiente. Sin commit solicitado; no requiere despliegue frontend.
+
+
+### 2026-10-30 - DATA-CLIENT-IMPORT-01 - Clientes Sari desde Excel sin duplicados nuevos
+
+- Estado: aplicado y verificado en Produccion; no se transfieren datos reales a Demo. Sin cambios de aplicacion, esquema o RLS.
+- Fuente privada: Resumen clientes.xlsx, 361 filas; evidencia y SQL operativo en .ua/intermediate/client-import-20261030/ (ignorado; no versionar nombres, RTN, contactos ni SQL con datos).
+- 315 clientes nuevos y 22 existentes enriquecidos solo en campos vacios; total Sari 392. Nuevos: Contado, 0 dias, limite 0, HNL; TGU para Tegucigalpa/Comayaguela y SPS para el resto, autorizado por el propietario. Condiciones comerciales, oficina, nombre, IDs y responsables existentes preservados.
+- Cuatro pares claramente repetidos consolidados por nombre/RTN sin crear doble cliente; 20 filas agrupadas en 17 casos pendientes por identidad dudosa, nombre abreviado o duplicado existente. Reporte privado pending.csv. No se fusionan historiales ni se reactiva/elimina cliente alguno.
+- Identificadores fiscales fuente conservados sin inventar digitos; formatos atipicos senalados en observaciones. Sin asignacion especulativa de vendedor ni segmento.
+- Validaciones: preflight vivo bajo bloqueo/snapshot, transaccion dry-run con rollback OK, aplicacion atomica OK, codigos de cliente generados por trigger existente, fingerprints de tablas ajenas preservados, lectura independiente posterior compara campos de todos los importados y los 77 preexistentes; TypeScript OK.
+- Pendiente: confirmar 17 casos, revisar identificaciones fiscales atipicas y UAT autenticada. Sin commit solicitado; no requiere despliegue frontend.
+
+
+### 2026-10-30 - UX-ACC-EDITOR-02 - Editor en una fila de escritorio
+
+- Estado: TypeScript, ESLint y build OK; fila unica verificada en 1623/1280 px y sin overflow en 768/390 px con datos sinteticos. Publicacion en curso; UAT autenticada pendiente. HMR local reporta Router action dispatched before initialization; sin errores del formulario.
+- Archivos: src/app/(protected)/accounting/accounts/page.tsx, skills/sari-erp-maintenance/references/ui-conventions.md.
+- Sustituye max-w-5xl por ancho disponible; cinco campos contiguos en escritorio con codigo/naturaleza/nivel acotados y nombre/padre flexibles. Tablet y movil redistribuyen sin forzar scroll. Checks y acciones conservan filas propias. Sin cambios de datos ni validaciones de negocio.
+
+
+### 2026-10-30 - UX-ACC-EDITOR-01 - Editor contable proporcional al contenido
+
+- Estado: TypeScript, ESLint y build OK; revision visual sintetica OK en 1623/1280/768/390 px sin overflow; publicacion autorizada en curso, UAT autenticada pendiente.
+- Archivos: src/app/(protected)/accounting/accounts/page.tsx y skills/sari-erp-maintenance/references/ui-conventions.md. Sin SQL ni cambios de datos.
+- Editor max-w-5xl; codigo/naturaleza 10rem y nivel 13rem; nombre/cuenta padre con espacio descriptivo; checks agrupados y acciones al pie. Columna unica en movil. MaxLength y reglas de negocio intactos.
+- Regla permanente en referencia UI de la skill: dimensionar controles segun contenido sin celdas extensas vacias, no convertir el ancho visual en limite de datos.
+
+
+### 2026-10-30 - UX-ACC-FILTERS-02 - Filtros contables compactos
+
+- Estado: validado en main/demo; publicacion autorizada en curso, UAT visual pendiente.
+- Archivo: src/app/(protected)/accounting/accounts/page.tsx. Sin SQL ni cambios de datos.
+- Fila flex con salto de linea; anchos acotados desde sm: busqueda 288 px, estado 144 px, naturaleza 224 px, nivel 192 px y uso 208 px. Movil ocupa el ancho disponible; filtros no se estiran para rellenar escritorio.
+- Validaciones: TypeScript, ESLint y build de produccion OK; comprobacion visual pendiente.
+
+
+### 2026-10-30 - UX-ACC-FILTERS-01 - Filtros combinados del catalogo contable
+
+- Estado: validado en main/demo; publicacion autorizada en curso, UAT visual pendiente.
+- Archivo: src/app/(protected)/accounting/accounts/page.tsx. Sin SQL ni cambios de datos/RLS.
+- Naturaleza (catalogo existente), nivel (incluye sin nivel definido), uso (recibe movimientos/sin movimiento), estado y busqueda por codigo/nombre combinables. CompactSelect existente, etiquetas arriba, grilla adaptable, total de resultados y Limpiar filtros. Todo cambio reinicia pagina; sin coincidencias explica la combinacion de filtros.
+- Validaciones: TypeScript y ESLint del archivo OK en main/demo; build de produccion OK; 6 comprobaciones de filtros combinados OK. UAT visual pendiente.
+
+
+### 2026-10-30 - ACC-CATALOG-CLEANUP-01 - 704 cuentas y estado visual
+
+- Estado: depuracion aplicada y verificada en Produccion; UX validada y sincronizada con Pruebas, publicacion en curso; UAT visual pendiente.
+- Autorizacion explicita: eliminar las cuentas anteriores ausentes del Excel, dejando exclusivamente las 704 actualizadas.
+- SQL operativo privado: `.ua/intermediate/catalog-update-20261030/delete-obsolete-dry-run.sql` y `delete-obsolete-apply.sql`; rollback y aplicacion atomica OK. 104 filas eliminadas; 704 retenidas byte a byte, con sus IDs y jerarquias. FK vigentes impiden eliminar cuentas vinculadas; documentos de compra JSON revisados expresamente. Auditoria de eliminacion conservada en activity_logs.
+- Lectura independiente posterior: exactamente 704 cuentas, 700 activas y 4 reservas inactivas; coincide cada campo y padre con el catalogo aprobado. Sustituye la politica anterior de conservar cuentas ausentes inactivas de ACC-CATALOG-UPDATE-01.
+- UI: `src/app/(protected)/accounting/accounts/page.tsx`; Badge existente verde para Activa, rosado para Inactiva (incluye modo oscuro); CompactSelect por Todas/Activas/Inactivas, combina busqueda y reinicia paginacion. Sin librerias nuevas ni cambios de esquema/RLS.
+- Validaciones: TypeScript OK, ESLint del archivo OK, 3 pruebas accounting.test.mjs OK. Build de produccion OK. Publicacion y UAT visual pendientes; sin commit solicitado.
+
+
+### 2026-10-30 - ACC-CATALOG-UPDATE-01 - Catalogo Excel actualizado de Sari
+
+- Estado: aplicado y verificado en Produccion; sin cambios de aplicacion ni despliegue frontend.
+- Datos privados: `CatalogoCuentas (1).xlsx`; preparacion y evidencia en `.ua/intermediate/catalog-update-20261030/` (ignorado, no publicar).
+- 704 cuentas del catalogo: 700 activas, 588 auxiliares con movimientos; 4 reservas inactivas/no imputables con etiqueta tecnica `[RESERVADA SIN NOMBRE]`, conservando el nombre fuente vacio en la auditoria.
+- Correcciones autorizadas: 412 Ingresos no operacionales, 41202 Intereses devengados, 41203 Ingresos por comision, 52 Costos; 11301 SubCuenta y 4110107 Auxiliar.
+- 94 cuentas incorporadas; 104 anteriores ausentes desactivadas sin eliminar: 808 registros conservados. Identificadores de codigos existentes preservados.
+- SQL operativo privado: `dry-run.sql` (rollback) y `apply.sql` (transaccion atomica). No cambia esquema, migraciones, RLS, saldos iniciales ni configuracion de contabilizacion automatica. Auditoria en `activity_logs` con catalogo anterior completo y datos aprobados.
+- Validaciones: entorno Production, snapshot exacto bajo bloqueo, referencias contables vacias, jerarquia sin ciclos, igualdad de todos los campos importados, IDs preservados, dry-run remoto OK, aplicacion OK y lectura independiente posterior OK; `npx.cmd tsc --noEmit` OK.
+- Pendiente: UAT autenticada de Contabilidad y asignar nombres a reservas; Demo no recibe datos reales. Sin commit solicitado en esta operacion.
+
+
+### 2026-10-29 - UX-ACC-01 / ACC-DELETE-01 - Edición confirmada y eliminación segura de cuentas
+
+- Estado: implementado, migrado en Produccion/Pruebas y publicado; UAT
+  autenticada pendiente.
+- Hallazgo: en `/accounting/accounts`, Editar cargaba el formulario arriba de
+  la tabla sin desplazar ni enfocar; el usuario no notaba que ya podía editar.
+  El catálogo tampoco permitía eliminar cuentas creadas por error.
+- UX: Editar/Nueva cuenta desplazan al formulario y enfocan Código; formulario
+  resaltado con el código en el título; fila en edición marcada ("Editando").
+  Guardar una cuenta existente pide confirmación (ConfirmDialog); nueva cuenta
+  guarda directo. Ícono de papelera por fila con confirmación destructiva.
+- SQL: `20261029230000_delete_unused_accounting_account.sql` crea
+  `delete_accounting_account(uuid)` (security definer, `can_manage_finance`,
+  lock del catálogo por tenant). Solo elimina cuentas sin hijas, sin
+  `journal_lines`, sin uso en `purchase_documents.items` (JSON sin FK) y sin
+  referencias por FK (configuración, activos, tesorería, servicios); en esos
+  casos indica desactivar. EXECUTE revocado a `public`/`anon`.
+- Archivos: `src/app/(protected)/accounting/accounts/page.tsx`, migración y
+  `supabase/tests/accounting_catalog_structure.sql` (rechazos por hijas,
+  movimientos, compra y asignación; borrado exitoso; anon sin EXECUTE).
+- Validación: TypeScript; Node 530/530; lint 0 regresiones; SQL aislado
+  `sarierp_aud01` reseteado a 162 migraciones: 35/35 suites aprobadas.
+- Aplicación remota aislada (sin `db push` general; Outlook `20261002120000`
+  sigue excluido): preflight de solo lectura, ensayo con rollback verificado y
+  transacción registrada en `schema_migrations` con MD5
+  064df3b7e04bf856b08bd814f2f30010. Produccion: 714 cuentas sin cambios;
+  Demo: 0 cuentas. Postflight: función presente, anon sin EXECUTE.
+  Evidencia privada en `.ua/intermediate/account-delete-release-20261029/`.
+- Publicación: commits main 4812ce3, demo 70d1013. Vercel READY: Produccion
+  sarierp-79wywqadb (sari.forwarders.app), Pruebas sarierp-3eudlzdsj
+  (demo.forwarders.app). Smoke: /login 200 y /accounting/accounts 307 a login
+  en ambos. CI: Quality main 40967701591 y demo 40968082878 (application y
+  database) aprobados; paridad demo 40968082834 aprobada y main 40967701673
+  aprobada al reejecutar (fallo inicial: corrió antes del push de demo).
+- Pendiente: UAT con sesión real (editar con confirmación, eliminar una cuenta
+  sin uso y verificar el rechazo de una con movimientos).
+
+### 2026-10-29 - RELEASE-SUP-CAT-01 - Publicacion de catalogo y modal de proveedores
+
+- Estado: publicado y verificado en Produccion/Pruebas; UAT pendiente.
+- Migracion 20261029220000 registrada con MD5 540b83d708e07bfb22de8f81add2deb0;
+  ensayos con rollback y fingerprints de todos los registros existentes intactos.
+  Se conservan 124 proveedores de Sari y uno de Demo, sin reclasificacion.
+- RLS real de Produccion: dos Admin y Zonia crearon/editaron/reactivaron tipos
+  con tres eventos por actor; todo revertido. Catalogos iniciales: siete por
+  ambiente, cero eventos residuales; FK validada y RPC anonima denegada.
+- Limite Demo detectado: cuenta Admin vigente por rol/status pero acceso demo
+  vencido desde 01/10/2026; el guard la rechazo. No se modifico la vigencia ni
+  se afirma UAT autenticada en ese ambiente. Fixtures con acceso valido pasaron.
+- Validaciones locales: build main y demo; TypeScript; SQL aislado 35/11;
+  Node completo antes del modal 525/525 y 11 pruebas especificas finales en
+  ambas ramas. Navegador sintetico: catalogo y modal, fallos/cancelacion/foco,
+  una escritura y recarga sin navegar; 1280/390 px. Paridad 559/26 sin diferencias.
+- Evidencia privada en .ua/intermediate/supplier-catalog-release-20261029/,
+  supplier-type-catalog-20261029/ y supplier-modal-20261029/. Sin datos ni
+  credenciales en Git ni transferencia de proveedores reales a Demo.
+- Commits funcionales: main c29c3e8adfacef0b89764aaae35287d3cfa1c4ba;
+  demo 3d9a42b655aba363b990c86b8a152eca137a6aab.
+- Quality main 40962199655 y demo 40962199464: application/database aprobados.
+  Paridad 40962199934 aprobada; run simultaneo main cancelado por concurrencia.
+- Vercel READY: main sarierp-axonw1vzo; demo sarierp-fre7pl1iw. Smoke HTTP
+  sin sesion: 23/29 rutas y manifiestos de dominios iguales a los inmutables;
+  /suppliers, /suppliers/types y /suppliers/new protegidos en ambos.
+- UAT con sesion real pendiente; acceso Admin demo vencido sin modificacion.
+  Este seguimiento solo modifica documentacion.
+
+### 2026-10-29 - UX-SUP-02 - Alta de proveedor en modal desde el listado
+
+- Estado: implementado y validado localmente en main/demo; commit, publicación
+  y UAT autenticada pendientes. No se modificaron proveedores reales.
+- El botón Nuevo proveedor del encabezado y del estado vacío abre un Dialog
+  accesible, con desplazamiento interno y retorno de foco al botón de origen.
+  Reutiliza SupplierForm para modal y ruta `/suppliers/new`, con información,
+  contacto, tipo del catálogo y condiciones de pago. Guarda sin navegar y
+  recarga el listado; cancelar protege los cambios mediante el guard existente.
+- Envío protegido contra dobles clics; campos y cierre bloqueados mientras
+  guarda. Un error conserva los valores. Respuestas posteriores al desmontaje
+  no disparan navegación, callbacks ni avisos en otro contexto.
+- Archivos: `src/components/suppliers/{SupplierForm,NewSupplierDialog}.tsx`,
+  páginas de listado/alta y `tests/new-supplier-dialog.test.mjs`.
+- Validación: TypeScript en ambos worktrees; 11 pruebas específicas en main y
+  demo; componentes nuevos y ruta de alta sin diagnósticos ESLint; build main
+  aprobado. Navegador con datos ficticios: cancelación/descartar/foco, una sola
+  escritura, bloqueo de Escape durante envío, error y conservación de valores,
+  recarga a 125 registros sin navegar, modal contenido a 1280/390 px; sin errores.
+  Paridad: 559 archivos compartidos y 26 variantes, sin diferencias inesperadas.
+- Evidencia privada ignorada en `.ua/intermediate/supplier-modal-20261029/`.
+  No cambian SQL ni permisos en este ajuste. Publicar junto a CAT-SUP-01,
+  aplicando primero su migración pendiente. No acredita UAT con sesión real
+  ni prueba física iPadOS/Safari. Hash pendiente de commit.
+
+### 2026-10-29 - CAT-SUP-01 - Catálogo dinámico de tipos de proveedores
+
+- Estado: implementado localmente en main/demo; SQL remoto, commit, despliegue
+  y UAT autenticada pendientes. No cambia la clasificación de proveedores actuales.
+- Ubicación: acceso en Catálogos y en Proveedores a `/suppliers/types`.
+  Crear/editar nombre, código inicial, orden y activar/desactivar con switch;
+  búsqueda y paginación. Admin y máster de Contabilidad administran; los otros
+  usuarios financieros autorizados consultan y utilizan opciones activas.
+- Datos: `supplier_types` por tenant y eventos inmutables de cambios. Se migran
+  los siete valores originales como datos iniciales y se inicializan empresas
+  nuevas; se reemplaza el CHECK fijo por FK compuesta tenant/código. El código
+  permanece estable al renombrar. Tipos inactivos conservan referencias y permiten
+  editar otros datos del proveedor, pero no admiten nuevas asignaciones.
+- Conexión: filtro con búsqueda, indicadores dinámicos, alta y edición de ficha.
+  Activar/desactivar no borra otro formulario sin guardar (regresión cubierta).
+  Sin listas de opciones fijas ni fallback estático ante fallo del catálogo.
+  Lecturas paginadas completas y respuestas obsoletas descartadas por contexto.
+- Archivos: migración `20261029220000_supplier_type_catalog.sql`;
+  `supabase/tests/supplier_type_catalog.sql`, runners SQL de ambos ambientes;
+  `useSupplierTypes.ts`, `SupplierTypeSelect.tsx`, página `suppliers/types`,
+  páginas de listado/alta/detalle y Catálogos, `workspace-breadcrumbs.ts`,
+  `supplier-types.test.mjs` y actualización de `suppliers-pagination.test.mjs`.
+- Validación: Node completo main 525/525; seis pruebas específicas también en
+  demo; TypeScript en ambos; SQL aislado 35 escenarios main y 11 demo, todo con
+  rollback. Navegador con datos ficticios: crear, renombrar sin cambiar código,
+  desactivar, propagación al filtro y adaptación 1280/390 px; sin errores.
+  Lint:ci sin regresiones (528 archivos, 223 diagnósticos históricos);
+  build optimizado de main aprobado, nuevos componentes sin diagnósticos.
+  Paridad: 557 archivos compartidos, 26 variantes, sin diferencias inesperadas. Evidencia local ignorada en
+  `.ua/intermediate/supplier-type-catalog-20261029/` y logs SQL relacionados.
+- No se ejecutó SQL en Producción/Pruebas ni se copiaron proveedores reales.
+  Aplicar la migración antes del frontend. Sin eliminación de tipos ni pérdida
+  de historial; asignación de categorías sigue siendo decisión del usuario.
+- Pendiente: aplicar SQL, publicar y aceptar con sesión real.
+  Hash: pendiente de commit.
+
+### 2026-10-29 - RELEASE-UX-SUP-01 - Publicacion verificada en ambos ambientes
+
+- Estado: codigo funcional publicado y verificado; UAT autenticada pendiente.
+- Commits funcionales: main `2e0a165f68558a2f3b08e8c918e98213d1bd4213`;
+  demo `9adf40ad956446ea53e4ffd37d7c8c05b4ca23d3`.
+- Incluye UX-SUP-01 (25/50/75/100), UX-NAV-01, AUTH-FIN-01 y documentacion
+  DATA-SUP-01. No se publica el Excel ni datos personales de proveedores.
+- Validacion final: Node 521/521 y 527/527; TypeScript y builds en ambos;
+  lint:ci 524/537 archivos, 223 diagnosticos historicos, 0 regresiones;
+  SQL/RLS aislado 34 escenarios de produccion y 10 de demo; paridad 553
+  compartidos, 26 variantes revisadas, 0 diferencias inesperadas.
+- Navegador con datos ficticios: paginacion, tamanos y filtros a 1280/390 px,
+  pagina final completa y paginador visible fuera del scroll de tabla. Las
+  capturas no acreditan pruebas fisicas de iPadOS/Safari ni sesion real.
+- GitHub Quality: [main](https://github.com/dhernandezp123/sarierp/actions/runs/40950555933)
+  y [demo](https://github.com/dhernandezp123/sarierp/actions/runs/40950555797),
+  application/database aprobados. [Paridad](https://github.com/dhernandezp123/sarierp/actions/runs/40950555913)
+  aprobada; el run simultaneo de demo fue cancelado por concurrencia, sin fallo.
+- Vercel READY: main `sarierp-ip9hlle33` y demo `sarierp-cywfojydx`.
+  Smoke HTTP sin sesion: 23 rutas produccion y 29 demo; manifiestos de cada
+  dominio coinciden con su despliegue inmutable. /suppliers protegido en ambos.
+- Base remota: hash de migracion 20261029210000 verificado en ambos; Sari
+  conserva 124 proveedores y la designacion master de Zonia. Sin transferencia
+  de datos/credenciales a Demo. Escrituras RLS de verificacion revertidas.
+- Operacion local: se libero cache descargable npm y cache de fixture para
+  recuperar espacio; lint/build se completaron secuencialmente con heap 3072 MB.
+  No se eliminaron datos ni volumenes Docker; contenedor aislado detenido.
+- Evidencia privada: .ua/intermediate/suppliers-pagination-20261029/ y logs
+  relacionados, ignorados por Git. Este seguimiento solo modifica documentacion.
+
+### 2026-10-29 - UX-SUP-01 - Paginación del listado de proveedores
+
+- Estado: implementado en main y demo; validación/publicación en curso.
+- Archivo: `src/app/(protected)/suppliers/page.tsx`; reutiliza `Pagination`
+  con 25/50/75/100, rango visible y anterior/siguiente fuera del scroll de tabla.
+  Los filtros y cambios de tamaño regresan a página 1; se pagina el resultado
+  filtrado completo. `readAllReportRows` recupera todas las páginas de la API,
+  con orden estable por nombre/id, evitando truncamiento del listado.
+- Pruebas: `tests/suppliers-pagination.test.mjs` verifica 124 activos, última
+  página, tamaños, filtros/inactivos y respuestas de API limitadas a 40 filas.
+  Suites Node completas: main 521/521 y demo 527/527. Compilación inicial sufrió
+  falta de heap al ejecutar varias verificaciones; se reintenta secuencialmente.
+- No modifica datos, SQL ni permisos. Incluye en la publicación autorizada los
+  cambios pendientes UX-NAV-01, AUTH-FIN-01 y documentación DATA-SUP-01.
+- Validaci?n final: builds optimizados y TypeScript en ambos, lint:ci sin
+  regresiones (223 hist?ricos), navegador con datos ficticios a 1280/390 px.
+  Publicado en RELEASE-UX-SUP-01; solo UAT autenticada pendiente.
+
+### 2026-10-29 - AUTH-FIN-01 - Autoridad financiera de Admin y acceso a proveedores
+
+- Estado: migración aplicada en Producción y Pruebas; verificación RLS real en
+  Producción aprobada para los dos Admin de Sari y Zonia. UAT visual pendiente.
+- Causa: `is_invoice_master` exigía designación individual también a Admin,
+  contradiciendo la autorización solicitada de acceso administrativo completo.
+  Ahora admite Admin aprobado/activo del tenant o Contabilidad designada. No
+  concede acceso de plataforma ni entre empresas; conserva la designación de Zonia.
+- Aprobaciones de corrección: admite revisor Admin vigente de la misma empresa;
+  para Contabilidad mantiene identidad y fecha de la designación. Continúan
+  aprobación por versión, contexto, anulación previa, auditoría y correlativos.
+- Archivos: `supabase/migrations/20261029210000_tenant_admin_financial_authority.sql`
+  y `supabase/tests/{cai_master_lifecycle,invoice_drafts_and_master_review,
+  service_accounting_assignments}.sql`, replicados en demo. Sin cambios de frontend.
+- Validación: 34 escenarios SQL de producción y 10 de demo en base aislada con
+  rollback; escenario CAI repetido tras corregir el contexto del fixture inactivo.
+  Incluyen activar/desactivar CAI como Admin, editar proveedores como Admin y
+  Contabilidad, aprobación por Admin, aislamiento y rechazo de Admin inactivo.
+  Node de acceso/cuentas: 13/13; TypeScript en ambos; paridad 553/26 sin diferencias.
+- Remoto: ensayo con rollback y aplicación transaccional de la única migración,
+  con comprobación de definiciones previas, registro de versión y fingerprints
+  inalterados de CAI/historial, proveedores, perfiles, facturas, borradores,
+  aprobaciones y oficinas. Cada Admin y Zonia ve 124 proveedores y pudo actualizar
+  uno bajo rol authenticated; esas escrituras de verificación se revirtieron.
+- Evidencia privada ignorada por Git: `.ua/intermediate/admin-finance-access-20261029/`
+  y logs relacionados. Pendiente: commit del código/SQL y aceptación visual al
+  recargar la página; no hace falta despliegue frontend para este permiso. Hash: pendiente.
+
+### 2026-10-29 - DATA-SUP-01 - Importación del listado de proveedores de Sari
+
+- Estado: carga aplicada y verificada mediante lectura independiente en Sari
+  Producción. Archivo: `Resumen proveedores.xlsx`, 128 filas de datos.
+- Resultado: 124 proveedores únicos; 123 insertados y uno existente enriquecido
+  sin modificar su configuración. Cuatro pares repetidos se consolidaron por
+  nombre normalizado y/o RTN coincidente, conservando sus datos complementarios.
+  Valores de los nuevos, confirmados por el usuario: Otro, HNL, contado (0 días).
+- Direcciones, ciudades, departamentos y retenciones originales se conservaron
+  en notas. Trece RTN de 13 dígitos se conservaron sin completar ni inventar
+  dígitos y quedaron identificados para revisión de Contabilidad.
+- Ejecución: transacción con bloqueo breve y comprobación del snapshot previo,
+  tenant y ambiente; ensayo con rollback, carga con commit y consulta posterior.
+  Verificador comparó todos los valores importados y la configuración anterior.
+  TypeScript sin errores. No hubo cambios de código de aplicación, SQL de
+  esquema, RLS ni despliegue. Datos y credenciales no se copiaron a Demo.
+- Evidencias/scripts/SQL/CSV de revisión: directorio local ignorado por Git
+  `.ua/intermediate/supplier-import-20261029/` y scripts privados relacionados.
+  Los datos personales del archivo no se incorporan al repositorio.
+- Pendiente: revisar los 13 RTN con Contabilidad y aceptación visual con sesión
+  autenticada. Documentación publicada en RELEASE-UX-SUP-01.
+
+### 2026-10-29 - UX-NAV-01 - Breadcrumbs y filtros de selección múltiple
+
+- Estado: implementado y validado localmente en los worktrees main y demo.
+  Publicado en RELEASE-UX-SUP-01. UAT autenticada pendiente.
+- Cambios: rutas de navegación compartidas con ancestros válidos, página actual
+  sin enlace, detalle contextual conservado sin duplicación y ruta expandible
+  en móvil. Selector múltiple reutilizable con búsqueda sin tildes, teclado,
+  etiquetas removibles, selección de resultados y menú de ancho/alto acotados.
+- Integración: tipos/estados/oficinas en Facturación; clientes/proveedores,
+  estados y tipos en estados de cuenta; clientes/fases/modalidades/estados en
+  operaciones; cuentas contables en Mayor; cuentas bancarias en reportes.
+  Crear documentos y conciliar una cuenta mantienen selección única.
+- Integridad: Pendientes/Vencidos se unen sin duplicar filas; exportación y
+  totales utilizan los mismos filtros. El Mayor conserva apertura y saldo por
+  cuenta; bancos mantienen cuenta y moneda; filtrar tipos de movimiento no
+  altera el saldo histórico completo. Operaciones de varios clientes se
+  identifican como consolidado interno; una selección individual conserva el
+  reporte comercial y su lista explícita de columnas autorizadas.
+- Archivos: `src/components/ui/{Breadcrumbs,MultiSelect}.tsx`,
+  `src/components/layout/{WorkspaceBreadcrumbs,protected-shell}.tsx`,
+  `src/app/globals.css`, `src/lib/{workspace-breadcrumbs,invoice-list-filters,
+  multi-account-ledger,finance-report,treasury-report,client-operations-report}.ts`,
+  `src/components/accounting/{FinanceReportWorkspace,TreasuryWorkspace}.tsx`,
+  páginas de `invoicing`, `accounting/books`, `reports/client-operations`,
+  `tests/{navigation-multiselect,client-operations-report,collections-workspace}.test.mjs`
+  y `docs/quality/environment-parity.json`. SQL: ninguno; sin cambios de RLS,
+  permisos, CAI o datos. Se conservan las 26 variantes de ambiente revisadas.
+- Validación local: TypeScript sin errores en ambos worktrees; Node 519/519 en
+  main y 525/525 en demo; lint:ci sin regresiones (223 diagnósticos históricos).
+  Builds optimizados aprobados en ambos; demo compiló con placeholders sin
+  credenciales, sin transferir variables sensibles de Producción.
+  Paridad: 552 archivos compartidos, 26 variantes, 0 diferencias inesperadas.
+  Navegador Chrome con datos sintéticos: 7 escenarios de teclado/foco,
+  accesibilidad, filtros/exportación, saldos separados, jerarquía y ausencia
+  de desbordamiento a 1280/768/390 px; tema oscuro; sin errores de ejecución.
+  Evidencia local en `.ua/intermediate/navigation-filters-20261029/` (ignorada).
+- Publicación verificada en RELEASE-UX-SUP-01; aceptación con sesión real pendiente. La
+  emulación de viewport no acredita prueba física en iPadOS/Safari. No se
+  transfirieron credenciales ni datos reales entre ambientes. Hash: pendiente.
+
+### 2026-10-29 - UX-FORM-01 - Formularios con etiqueta arriba y registro de Compras
+
+- Estado: publicado en Producción y Pruebas; revisión autenticada pendiente. No
+  modifica SQL, permisos, RPC ni datos.
+- Hallazgo (reportado por el usuario en Compras > Registrar documento): las
+  etiquetas `<label>Texto<select/></label>` sin clase dejaban el texto en línea y
+  el `select` (máx. 448 px) a su lado; "Oficina emisora" mostraba dos etiquetas
+  (`BillingOfficeSelect` traía la suya, también en línea en los cuatro
+  formularios de clientes); tres tamaños de etiqueta; grilla única con huecos;
+  líneas sin bloque; sin marcas de obligatorio; total suelto. Auditoría del repo:
+  52 etiquetas con `select` al lado y 145 con campo sin separación en 45
+  archivos; etiquetas separadas no `block` en Pricing (`labelClass`), Cobranza y
+  reporte de operaciones.
+- Cambios: `FormField`/`FormSection` en `src/components/ui/form-field.tsx`
+  (antes vacío) y `fieldLabelClass`, `fieldStackClass`, `formSectionTitleClass`
+  en `ui-classes.ts`. Compras rediseñada con el patrón de `/quotations/new`:
+  secciones Documento / Datos del proveedor (boleta) / Líneas, cada línea como
+  bloque numerado con importe y "Quitar", resumen Subtotal/ISV/Total y acciones a
+  la derecha; listado con `Pagination` y enlaces de marca. Misma lógica de
+  guardado y validación. `BillingOfficeSelect` recibe `label` y `required`.
+  ~170 etiquetas apiladas en 45 archivos (Contabilidad, Facturación, Operaciones,
+  Cotizaciones, Plataforma, portal) con el texto en `fieldLabelClass`, sin
+  `mt-*` redundante ni negrita heredada por el control; `labelClass` de
+  `src/lib/ui.ts` pasa a `block`; `InvoiceLineSettings` usa la misma etiqueta;
+  Activos y Asientos usan `Pagination`. Excepciones intencionales sin cambio:
+  filtros en línea "Ver"/"Mostrar" (dashboard, detalle de cotización), botón
+  "Importar CSV", descuento en línea de `invoicing/new` y campo USD de la
+  comparación FCL. Skill: `ui-conventions.md` agrega la sección "Formularios" y
+  `SKILL.md` la referencia.
+- Demo: mismo cambio; `InsuranceCalculationDialog.tsx` es variante revisada
+  (marca de agua de impresión) y el manifiesto de paridad actualiza sus huellas
+  en ambas ramas.
+- Validaciones: `npx tsc --noEmit`; `npm test` 511/511; `lint:ci` 517
+  archivos, 223 históricos, 0 regresiones. Navegador (fixture fuera de Git,
+  Chrome headless): Compras factura a 1280 y 768 px, boleta USD y retención a
+  1280 px; Nuevo cliente; Activos; Asientos; Caja y bancos; Cuentas por cobrar.
+  Escaneo final: solo quedan las excepciones intencionales.
+- Commits funcionales: main `dc5b25e`, demo `1c5bf19` (cherry-pick limpio).
+  Demo: `tsc`, `npm test` 517/517, `lint:ci` 530 archivos sin regresiones y
+  paridad 547 compartidos / 26 variantes / 0 diferencias. `npm run build` local
+  aprobado en main.
+- Publicación: Vercel Production `sarierp-r77o4fzs5` (commit `dc5b25e`, alias
+  `sari.forwarders.app`) y Preview `sarierp-h8t51xn28` (commit `1c5bf19`, alias
+  `demo.forwarders.app`) en Ready; `/login` 200 y `/accounting/purchases` 307 al
+  login en ambos.
+- CI: Quality `40937926397` (main) aprobado en aplicación y base de datos;
+  paridad `40937931508` (demo) aprobada (la de main se canceló por el grupo de
+  concurrencia compartido). Quality `40937931558` (demo): aplicación aprobada;
+  base de datos falló al descargar imágenes Docker (`toomanyrequests: Data limit
+  exceeded`) antes de ejecutar SQL; el commit no incluye SQL.
+- Pendiente: revisión autenticada en Compras (registro real de factura, boleta y
+  retención) y en formularios de Operaciones, que no se renderizaron en el
+  fixture.
+
+### 2026-10-29 - CI-SQL-02 - Evitar gateways innecesarios en las pruebas SQL
+
+- Estado: verificado en CI de main y Demo; todas las suites SQL/RLS aprobadas.
+- Archivos: .github/workflows/quality.yml en main y Demo. No cambia SQL ni
+  servicios desplegados. El arranque de CI excluye Kong y PostgREST, que no
+  utilizan las fixtures ejecutadas directamente con docker exec / psql.
+  Se conserva la inicialización de Auth/Storage, todas las migraciones,
+  suites completas, comprobaciones de salud y limpieza de la pila desechable.
+- Motivo: CI Trial falló dos veces antes de ejecutar SQL por límites de descarga
+  de ECR/GHCR y fallbacks inexistentes de Kong/PostgREST. No fue fallo de las
+  pruebas: 34/34 SQL main pasó en CI y 10/10 Trial pasó localmente.
+- Validación: revisión de los runners, sin peticiones HTTP a esos servicios;
+  referencia: https://supabase.com/docs/reference/cli/supabase-start.
+- Verificación: Quality main 40932807229 y Demo 40932813644 aprobados; paridad
+  40932813618 aprobada. Commits CI main 94805c72f540d7f1d72bfb525f451de3a7661790
+  y Demo 843d452cf9a50ae183be67e3ace7480f89678f7e; sin cambios de negocio ni datos.
+
+### 2026-10-29 - ACC-SERVICE-01 - Cuentas contables por servicio y variante fiscal
+
+- Estado: publicado y verificado técnicamente en Production y Trial.
+  UAT autenticada con Zonia pendiente.
+- Configuración: contador de conceptos únicos pendientes, ingresos, costos/gastos
+  y clasificación; búsqueda por código/nombre y secciones separadas para cargos
+  y familias operativas. Variantes I, E y Exonerada independientes y estables;
+  se configuran solo las variantes/lados aplicables, exclusivamente por el máster.
+  No se asignan cuentas ambiguas ni costos por suposición. No se activa contabilidad.
+- Archivos: src/lib/service-accounting.ts, src/hooks/useServiceAccounting.ts,
+  src/components/accounting/ServiceAccountingAssignments.tsx,
+  src/components/invoicing/InvoiceLineSettings.tsx, src/lib/invoice-drafts.ts,
+  src/app/(protected)/accounting/settings/page.tsx,
+  src/app/(protected)/accounting/purchases/page.tsx,
+  src/app/(protected)/invoicing/new/page.tsx.
+- SQL: supabase/migrations/20261029180000_service_accounting_assignments.sql;
+  dos tablas con RLS, FK por tenant, RPC máster con revisión y auditoría atómicas.
+  El servicio exacto de pricing se conserva; una familia solo aplica al flete.
+  Facturas/compras guardan sus cuentas al emitir. Cambiar asignaciones no modifica
+  históricos; un servicio sin cuenta guardada no se contabiliza con un ingreso
+  global supuesto. Se admite cuenta explícita válida para referencias retiradas.
+- Pruebas: tests/service-accounting.test.mjs y
+  supabase/tests/service_accounting_assignments.sql; registradas en los runners
+  SQL de main y Demo. 511/511 Node, 34/34 SQL Production, 10/10 SQL Trial,
+  más revalidación de la última versión de variantes en ambas bases aisladas.
+  TypeScript en ambos, ESLint sin regresiones y ambos builds aprobados.
+  Seis comprobaciones en navegador con datos ficticios (escritorio/móvil,
+  búsqueda, filtros, variantes, guardado/error, permiso máster), sin errores.
+  Paridad: 547 archivos compartidos y 26 variantes revisadas, cero diferencias.
+- Incluye UX-FIN-04 pendiente: once combobox de cuentas operativas, sin alterar
+  sus filtros, IDs ni RPC. Evidencia privada: .ua/intermediate/service-account-release-20261029/.
+- Riesgos/pendientes: Zonia debe definir auxiliares de costos/gastos y confirmar
+  los códigos I/E de ADUANA; no se cargan asignaciones reales. Emulación de
+  navegador no equivale a iPad físico ni UAT. Trial conserva sus bloqueos de
+  correo y usa datos ficticios; no se transfieren catálogos ni secretos.
+- Publicación técnica verificada: migración 20261029180000 aplicada en ambos
+  ambientes, MD5 2d985f0244f99735688bde9e6d3b6a16. Huellas de 131 tablas
+  originales de Production y 134 de Trial preservadas en la transacción; sin
+  cambios de usuarios, permisos anteriores, CAI/correlativos ni otras migraciones.
+  Contabilidad automática desactivada; cero asignaciones reales precargadas.
+  Production conserva 714 cuentas / 572 auxiliares. Trial no recibe el catálogo real.
+- Despliegues Vercel Ready: Production dpl_DCmKBm2FfXEJY9Q4Bz4szJbUGEZ9 y
+  Preview dpl_B3Nh5UHrwMifyU8yBv5X8Tf3ggEP. sari.forwarders.app y
+  demo.forwarders.app coinciden con sus manifests inmutables; 23/29 checks HTTP
+  sin sesión aprobados, incluidas protección de rutas/API y restricciones Demo.
+  Un 503 inicial de Trial no se reprodujo en consultas individuales ni en el
+  smoke completo posterior. Estas comprobaciones no son UAT autenticada.
+- CI Quality de ambos aprobado (aplicación y SQL/RLS) y paridad vigente aprobada.
+  El primer job SQL Trial falló descargando Kong por límites de registro Docker;
+  se corrigió el arranque CI excluyendo Kong/PostgREST sin quitar pruebas ni
+  inicialización Auth/Storage (CI-SQL-02). La ejecución
+  de paridad inicial de main fue cancelada por su grupo compartido; la última
+  compara ambas ramas y pasó. Logs y manifiestos en la evidencia privada.
+- Código publicado: main 8c1a372fc8ddc6ab794f39c13eca52725f39739d;
+  demo 3184eeb8822f1578da5dca3e1c9a0835c00c9d1d.
+
+### 2026-10-29 - UX-FIN-04 - Combobox buscable en configuración de cuentas
+
+- Estado: implementado en main y Demo; validación funcional, visual y builds
+  locales aprobados. Publicado con ACC-SERVICE-01; aceptación autenticada pendiente.
+- Archivo: `src/app/(protected)/accounting/settings/page.tsx` en ambos árboles.
+  Los once selectores nativos de cuentas operativas usan `CompactSelect` con
+  búsqueda explícita por código/nombre, sin distinguir mayúsculas ni tildes.
+  Lista con desplazamiento y tamaño acotados; código/nombre y nivel/naturaleza;
+  etiquetas asociadas al campo, manejo de teclado, foco y «Sin configurar».
+- Se conservan los filtros de cuenta activa/de movimiento y naturaleza por uso,
+  incluido Costo para compras. Mismas identidades de cuentas y RPC de guardado;
+  no se activa la contabilidad ni se cambian fechas, permisos o SQL. Los controles
+  se deshabilitan durante el guardado. Máster y usuario por oficina ya disponían
+  de combobox con búsqueda y se reutilizan sin duplicarlos.
+- Validaciones: 506/506 Node, TypeScript y ESLint de la página en ambos árboles.
+  Página y controles reales renderizados con 714 cuentas ficticias: siete
+  comprobaciones de búsqueda, elegibilidad, guardado, limpieza, teclado/Escape y
+  menús en 1280/768/390 px y oscuro, sin errores en la ejecución final.
+  Fixture/capturas privados en `.ua/intermediate/settings-combobox-validation/`;
+  emulación de dispositivo, no prueba física de iPad/Safari ni UAT autenticada.
+- Paridad de código aprobada: 543 compartidos, 26 variantes, cero diferencias.
+- Builds main y Demo aprobados. El build local Demo usa los placeholders
+  no funcionales ya utilizados para compilar ese ambiente, sin credenciales
+  reales ni acceso autenticado remoto; no es evidencia de UAT.
+- Publicación técnica completada con ACC-SERVICE-01. Pendiente:
+  aceptación autenticada. Se conservan separados los cambios CAI-CONFIRM-03 ya
+  aplicados; no se vuelve a ejecutar su migración ni se alteran datos reales.
+
+### 2026-10-29 - CAI-CONFIRM-03 - Restaurar TGU a los rangos registrados 000-001
+
+- Estado: aplicado y verificado en Producción y Pruebas (registro de Codex);
+  fuente versionada en main `a80bbff` y demo `8c26c5d`. Validación SQL de CI y
+  aceptación autenticada con Zonia pendientes.
+- El propietario confirmó expresamente restaurar TGU 000-001. SPS conserva
+  001-001. Zonia ya es el máster individual aprobado y activo; el bloqueo era la
+  oficina 000-000 frente a sus tres rangos 000-001 conservados por la corrección anterior.
+- SQL nuevo: `supabase/migrations/20261029170000_restore_tgu_registered_cai_prefix.sql`.
+  Conserva las migraciones aplicadas, valida rangos/documentos y cambia únicamente
+  el punto de emisión TGU. No deshabilita triggers, no activa rangos, no cambia
+  CAI, límites, fechas, correlativos, permisos ni cuentas. Auditoría administrativa
+  sin suplantar al máster. Instalación vacía/Pruebas no recibe configuración real.
+- Regresión: `supabase/tests/tgu_restore_registered_cai_prefix.sql`; reproduce
+  el bloqueo, restaura la oficina, compara cada campo CAI, comprueba idempotencia,
+  deniega al usuario no máster y permite reactivar los tres documentos al máster
+  sin consumir números. Runners `scripts/validate-audit-sql.mjs` y, en Demo,
+  `scripts/validate-demo-sql.mjs`, con acceso ficticio propio del ambiente.
+- Validaciones: SQL/RLS local en ambas bases dentro de rollback; ensayos remotos
+  conservan todas las filas originales, Auth, funciones, políticas, triggers,
+  permisos e historial de migraciones; CAI y numeración íntegros. Sin cambio de UI.
+- Aplicación atómica: solo cambia el código TGU y se añade una auditoría con
+  usuario nulo; la transacción compara todas las filas originales bajo bloqueo.
+  Postflight: 131/134 tablas con RLS, funciones y permisos intactos, siete CAI
+  originales iguales y tres TGU inactivos; Pruebas conserva cero CAI y sus oficinas
+  sin códigos. Fuente aplicada idéntica en ambos historiales (MD5
+  `d780f06a0e216a03d47de8804df77b70`). TypeScript en ambos árboles, ESLint de
+  runners, diff y paridad aprobados: 543 compartidos, 26 variantes, cero diferencias.
+- Entre la instantánea inicial y la aplicación, un usuario actualizó un cliente
+  y registró su historial; la hora de esa operación precede a la restauración.
+  Esa edición se preservó y no forma parte de la transacción de mantenimiento.
+- Commit y publicación (29/10/2026): MD5 de la fuente confirmado antes del commit
+  (`d780f06a0e216a03d47de8804df77b70`), idéntica en ambas ramas; ningún workflow
+  aplica migraciones. Local: TypeScript, `npm test` 506/512, `lint:ci` sin
+  regresiones y paridad 0 diferencias. El Supabase local tiene un esquema anterior
+  (sin `billing_offices`) y no se modificó, por lo que la prueba SQL no se pudo
+  ejecutar localmente. CI Quality `40915293175` (main) y `40915300401` (demo):
+  application aprobado; database falló dos veces al descargar imágenes Docker
+  (`toomanyrequests: Data limit exceeded`) antes de ejecutar SQL. Paridad
+  `40915300561` aprobada. Vercel: Production commit `a80bbff`
+  (`sarierp-fa2y6hijd`) y Preview commit `8c26c5d` (`sarierp-bjjekqtjg`) `READY`,
+  alias verificados; login 200. Frontend sin cambios funcionales.
+- Pendiente: relanzar el job database cuando el registro lo permita y confirmar
+  `tgu_restore_registered_cai_prefix.sql` en ambos; activación por Zonia y
+  aceptación autenticada.
+
+### 2026-10-29 - UX-FIN-03 - Navegación de Anulaciones y formularios de Configuración contable
+
+- Estado: publicado en Producción y Pruebas; revisión autenticada pendiente. No
+  modifica SQL, permisos ni datos.
+- Hallazgos reportados por el usuario tras UX-FIN-02 (revisión visual omitida
+  antes de publicar):
+  - La pestaña "Anulaciones" de `AccountingNav` llevaba a `/invoicing/voids`,
+    que no muestra la barra contable: las pestañas desaparecían.
+  - `/accounting/settings`: cada etiqueta quedaba en línea con su `select`
+    (limitado a 448 px), con filas escalonadas y recuadros pegados al texto desde
+    ~1100 px; tarjetas superiores de 768 px frente a inferiores a todo el ancho;
+    fecha de inicio a todo el ancho. Maquetación previa a UX-FIN-02, no detectada.
+  - Anulaciones a 768 px: campo de búsqueda desalineado por etiqueta de dos líneas
+    y paginación dentro del desplazamiento horizontal de la tabla.
+  - `/invoicing`: el enlace "Estado de cuenta completo" y el selector "Por
+    facturar / Documentos emitidos" eran elementos en línea contiguos y quedaban
+    pegados (ya ocurría antes de UX-FIN-02; el botón pasó a enlace sin separarlos).
+- Cambios: `src/app/(protected)/accounting/voids/page.tsx` reexporta la página
+  de Anulaciones; esta detecta `/accounting` para mostrar `AccountingNav` con la
+  pestaña activa y eyebrow Contabilidad (sin el acceso a Facturación). Desde
+  Facturación no cambia. `AccountingNav` apunta a `/accounting/voids`.
+  Configuración: etiquetas `flex flex-col`, rejilla de dos columnas con separación,
+  máster y oficinas lado a lado desde `xl`, fecha `max-w-xs`, títulos uniformes.
+  Anulaciones: filtros `items-end`, etiquetas en columna y paginación fuera del
+  área desplazable. Facturación: selector y enlace en una fila `flex-wrap`
+  con separación (selector a la izquierda, reporte a la derecha) y `aria-pressed`
+  en el selector; Demo conserva su marca de agua y el manifiesto de paridad
+  actualiza las huellas de `invoicing/page.tsx` en ambas ramas. Skill: `ui-conventions.md` agrega la regla de etiquetas, la
+  ruta contable de Anulaciones y la verificación visual obligatoria.
+- Validaciones: `npx tsc --noEmit`; `npm test` 506/506; `lint:ci` 513 archivos,
+  223 históricos, 0 regresiones; `npm run build` con `/accounting/voids`.
+  Navegador: fixture fuera de Git (`.ua/intermediate/fin-fixture`) con las
+  páginas reales, `globals.css`, sesión Admin y Supabase sintéticos por alias de
+  webpack; Chrome headless a 1280 y 768 px. Revisadas Configuración (antes y
+  después), Anulaciones en Contabilidad y Facturación, Cuentas, Asientos,
+  Compras, Activos, Caja y bancos, Cuentas por cobrar, Estado de proveedores,
+  Libros y Facturación (antes y después a 1600, 1280 y 768 px). Tipografía del fixture distinta a la app (sin fuente cargada).
+- Pendiente: revisión autenticada en Producción y móvil real; Chrome headless no
+  baja de 504 px de viewport y la captura a 390 px no es válida.
+- Commits funcionales: main `4b38840`, demo `9a55358`; push de ambos sin SQL.
+- CI: Quality `40909464676` (main) aprobado; paridad `40909465437` (demo)
+  aprobada; la de main `40909464562` quedó cancelada por el grupo de
+  concurrencia. Quality `40909465431` (demo) falló solo en el job database al
+  descargar imágenes Docker (`toomanyrequests`, límite del registro); application
+  aprobó y el job relanzado terminó aprobado, sin cambios de código.
+- Publicación: Vercel Production `dpl_CmDEzinTjDmMSPm2RTdcVZQPVxwP`, `READY`,
+  commit `4b38840`, alias `sari.forwarders.app`; Preview
+  `dpl_FmgcCy3vSkN7dew1mtypcsrsLG4E`, `READY`, commit `9a55358`, alias
+  `demo.forwarders.app`. Smoke sin sesión en ambos: login 200 y
+  `/accounting/voids` 307 a login.
+
+### 2026-10-29 - UX-FIN-02 - Coherencia visual de Finanzas y Contabilidad (fase 1)
+
+- Estado: publicado en Producción y Pruebas; revisión autenticada en navegador
+  pendiente. No modifica SQL, permisos, RPC, cálculos, estados ni datos.
+- Hallazgo: tres estilos de cabecera (azul en Facturación, marca en Cobranza con
+  eyebrow fijo "Facturación · Gestión financiera" incluso en Caja/Proveedores, y
+  `h1` sin descripción en Contabilidad); doble padding en Contabilidad/Cobranza;
+  cinco modales `fixed inset-0` sin foco atrapado ni Escape; formateadores
+  locales de fecha/moneda; `type="number"` sin `NumberInput`; tres paginaciones;
+  enlaces azules; "Estados de cuenta" titulado "Cuentas por cobrar" con pestañas
+  contables sin pestaña activa; filas de documentos abribles solo con mouse;
+  selector de año del cierre fijo en 2024–2027; aviso de quitar línea de factura
+  siempre en "USD" aunque el documento fuera HNL.
+- Cambios:
+  - `FinanceWorkspace.tsx`: `FinancePageHeader` con `eyebrow`, descripción y
+    acciones opcionales; `financeLinkClass`.
+  - Cabecera única en Facturación, Borradores, Anulaciones, Cobranza, Estados de
+    cuenta, Cuentas por cobrar/proveedores, Caja y bancos y las seis páginas de
+    Contabilidad (`accounts`, `assets`, `books`, `journal`, `purchases`,
+    `settings`); se retira el padding duplicado.
+  - `Dialog` en Cierre del período y Estado de cuenta (`invoicing/page.tsx`) y en
+    Registrar pago, Pago de contado registrado y Reversar pago
+    (`invoicing/[id]/page.tsx`); no se cierran mientras se guarda o reversa.
+  - `formatMoney`/`formatDate(…, '—')` en listado, detalle y nueva factura. El
+    precio unitario conserva sus decimales adicionales.
+  - `NumberInput type="number"` en Cobranza, nueva factura, pagos del detalle,
+    asientos, compras, activos y montos de CxP.
+  - `Pagination` en Anulaciones, recibos de Cobranza y reportes de cartera.
+  - Enlaces de marca en Facturación, Contabilidad, anulación fiscal, correcciones
+    y CxP; número de factura enlazado y enfocable con teclado.
+  - `/invoicing/statements` titulado "Estados de cuenta", sin `AccountingNav`.
+  - Años del cierre derivados de los documentos y del año actual.
+  - Aviso de quitar línea con la moneda del documento.
+- Fuera de alcance (fases siguientes): reorganizar la navegación de Finanzas,
+  unificar accesos al estado de cuenta, acción principal y menú en Facturación,
+  Dashboard Financiero (rentabilidad cotizada), prellenar TC en Cobranza, cierre
+  mediante el exportador financiero y monedas fijas HNL/USD en selectores.
+- Pruebas: `tests/supplier-payment-flow.test.mjs` simula `NumberInput` como
+  `input`, igual que `tests/page-harness.mjs`; los demás tests no cambian.
+- Skill: `skills/sari-erp-maintenance/SKILL.md` enlaza la nueva
+  `references/ui-conventions.md`; `module-map.md` separa Facturación/cobranza,
+  Contabilidad/tesorería y Pagos/costos e incluye las pruebas SQL financieras.
+- Validaciones: `npx tsc --noEmit` aprobado; `npm test` 506/506;
+  `npm run lint:ci` 512 archivos, 223 diagnósticos históricos, 0 regresiones;
+  `npm run build` aprobado. SQL/RLS no aplica (sin cambios de base).
+- Pruebas (`demo`): mismos archivos; `invoicing/page.tsx` conserva su variante
+  revisada (marca sandbox en la impresión del cierre) y el manifiesto
+  `docs/quality/environment-parity.json` actualiza sus dos huellas en ambas ramas.
+  `check-environment-parity.mjs`: 541 compartidos, 26 variantes revisadas, 0
+  diferencias. Demo: TypeScript, `npm test` 512/512 y `lint:ci` (525 archivos,
+  223 históricos, 0 regresiones). El build local de Demo exige claves reales del
+  proyecto Demo y no se ejecutó; lo valida el build Preview de Vercel.
+- Riesgos / pendientes:
+  - Revisión visual en navegador (escritorio y móvil, claro/oscuro) de las
+    pantallas citadas y de los cinco diálogos: solo hubo inspección de código.
+  - El listado conserva la fila clicable; el enlace detiene la propagación.
+- Revisión posterior (29/10/2026): la cabecera pasaba a fila desde 640 px con
+  acciones `shrink-0`; en Facturación (seis acciones, sin sidebar bajo 1024 px)
+  los botones salían de la vista y el título quedaba en 0 px. `FinancePageHeader`
+  usa ahora `flex-wrap`, título `flex-1 basis-80` y acciones `max-w-full`
+  envolventes. Medido en Chrome headless con el Tailwind del proyecto sobre la
+  misma cabecera: antes, a 700/768 px, acciones hasta 863 px y título 0 px; a 1024
+  px, título 57 px. Ahora, a 640/700/768/1024 px, sin desborde y título completo
+  (286 px); las acciones bajan bajo el título. Falta revisión en la app real.
+- Commits funcionales: main `c0b4d13c47bf1371832f2e91f2ccc12ab64c9554`, demo
+  `4da6cb1b369aed1478f82d460b19d9a765553556`. Se hizo push de ambos sin SQL.
+- CI: Quality `40901983813` (main) y `40901993850` (demo) aprobados. Paridad
+  `40901993808` (demo, compara el nuevo `origin/main` con Pruebas) aprobada; la
+  ejecución `40901984074` de main quedó cancelada por el grupo de concurrencia
+  `environment-parity` al iniciar la de demo.
+- Publicación: Vercel Production `dpl_HzMdt3YTGGCyCZpjLtzLVWwxFVdm`, `READY`,
+  commit `c0b4d13`, URL `https://sarierp-qriyjndhu-claudherhn-5641s-projects.vercel.app`,
+  alias `sari.forwarders.app` verificado. Pruebas: Preview
+  `dpl_GDGbvE2jQZiD4DCKxapsoqNWszrV`, `READY`, commit `4da6cb1`, alias
+  `demo.forwarders.app` verificado; Demo no usó destino de Producción. Smoke sin
+  sesión en ambos dominios: login 200 y `/invoicing` 307 a login. No certifica
+  la revisión autenticada de las pantallas.
+
+### 2026-10-28 - ACC-IMPORT-PDF-01 - Catálogo contable importado desde PDF
+
+- Estado: SQL aplicado en ambos ambientes y catálogo importado/verificado en Sari
+  Producción. Aceptación autenticada con Contabilidad pendiente.
+- Documento del propietario: 33 páginas, 714 códigos únicos y filas completas.
+  Excel/CSV privados de revisión conservan código/nombre/nivel y página original;
+  padres, clasificación y movimiento coinciden con las decisiones confirmadas.
+- El propietario confirmó solo 572 Auxiliar de movimiento y las cinco relaciones
+  según niveles/orden del PDF conservando códigos. Las otras 142 quedan sin
+  movimiento; la habilitación de sus hojas se revisará después, sin anticiparla.
+- Baseline: cero cuentas, cero asientos y configuración automática ausente. Carga
+  atómica: 714 cuentas, 572 de movimiento y 142 sin movimiento; nombres, códigos,
+  niveles y padres comparados íntegramente con el archivo confirmado.
+- Implementación: `src/lib/accounting.ts`, `accounting-books.ts`, catálogo,
+  configuración, compras y selector de cuentas en proveedores. CSV anterior
+  compatible y nivel opcional; selectores de naturaleza/nivel/padre compactos.
+- SQL nuevo: `20261028190000_account_catalog_structure.sql`, sin cuentas reales.
+  Agrega Costo/Resultado/Orden y nivel; agrupadoras sin movimiento, padres mixtos
+  de Resultado; compras/cuenta por defecto aceptan Costo y los asientos de Orden
+  balancean independientemente. Estados financieros excluyen Orden e incluyen
+  costos en el resultado. Plan: `docs/plans/sari-chart-of-accounts-import-20261028.md`.
+- Regresiones: tests de catálogo/libros y `accounting_catalog_structure.sql`, con
+  fixtures ficticios para ambos ambientes y runners de SQL correspondientes.
+  Datos reales y artefactos permanecen fuera de Git en
+  `.ua/intermediate/sari-account-catalog/`; no se copian a Pruebas.
+- Validación: extracción de las 33 páginas, revisión visual de primera/última,
+  unicidad, integridad de filas y jerarquía propuesta; consulta remota de solo
+  lectura. Archivo confirmado validado con el parser real, padres antes de hijas,
+  códigos textuales y 572/142. Aprobados: 506/512 Node, 32/8 SQL/RLS con rollback,
+  TypeScript, lint y compilaciones de ambos árboles. Seis comprobaciones de
+  navegador con 714 cuentas ficticias validan paginación/búsqueda, niveles,
+  padre mixto, importación CSV y menú móvil acotado, sin errores de ejecución.
+  Los fixtures financieros usan la zona de negocio Honduras; correo/seguridad
+  conservan UTC. Esto evita que current_date UTC adelante los cortes nocturnos;
+  no cambia fechas ni zona de sesiones de Producción. Paridad: 541 archivos
+  compartidos, 26 variantes revisadas, sin diferencias inesperadas.
+- Ensayos remotos con rollback y aplicación atómica: fuente de `20261028190000`
+  verificada contra Git en ambos historiales; 131/134 tablas con RLS, usuarios,
+  permisos, datos originales y migraciones previas conservados. Solo cuatro
+  funciones contables previstas cambian; CAI/contadores y oficinas intactos.
+- La carga real modifica únicamente `accounting_accounts` y añade una auditoría
+  administrativa con usuario nulo, rol de base de datos, hash del PDF/archivo de
+  carga, 714/572/142 y política confirmada; no suplanta a una persona. Los cinco
+  niveles quedan 5/12/34/91/572. Pruebas conserva cero cuentas y sus propios datos.
+  No se crearon saldos, asientos, períodos, clientes, proveedores o bancos ni se
+  activó contabilidad automática. Las 91 hojas no Auxiliar permanecen sin movimiento.
+- Commits funcionales: main `22f5deb`, Demo `0433e60`; registro final de fuente y
+  aplicación en este mismo historial. Pendiente: UAT con Contabilidad y futura
+  confirmación de movimiento para las hojas no Auxiliar; no anticipar esa decisión.
+
+### 2026-10-28 - CAI-CONFIRM-02 - Confirmación posterior de prefijos por oficina
+
+- Estado: SQL aplicado y verificado en Producción y Pruebas. Nueva autorización
+  fiscal TGU y aceptación autenticada con Contabilidad pendientes.
+- La confirmación vigente del propietario es TGU `000-000` y SPS `001-001`.
+  Sustituye la confirmación anterior que motivó `20261028150000`, cuyo SQL ya
+  aplicado e historial de publicación se conservan sin reescribir.
+- Consulta remota de solo lectura: oficinas SPS `001-001`, TGU `000-001`;
+  siete rangos con esos prefijos, seis con siguiente número superior al inicio
+  y `ever_used=true`. No hay documentos fiscales en invoices, compras o
+  retenciones vinculados a esos rangos; esto no descarta uso en el sistema anterior.
+- `20261028180000_tgu_confirmed_fiscal_prefix.sql` corrigió únicamente TGU:
+  desactiva sus rangos incompatibles conservando CAI, prefijos y correlativos,
+  corrige la ficha a `000-000` y registra ambos efectos sin suplantar un usuario.
+  SPS permanece intacta. No crea autorizaciones ni cambia numeración utilizada.
+- La protección de códigos se omite solo para esa fila durante la transacción,
+  con bloqueo de tabla, y se restaura antes de terminar. El ajuste aborta si
+  aparecen documentos fiscales TGU, códigos desconocidos o un prefijo duplicado.
+  Es idempotente; Trial sin rangos propios no recibe configuración real.
+- Archivos: `HARDENING.md`, `docs/quality/cai-office-numbering.md` y
+  `docs/release/accounting-finance-cai-2026-10-28.md`, en main y Demo.
+  SQL nuevo: `supabase/migrations/20261028180000_tgu_confirmed_fiscal_prefix.sql`.
+  Regresión: `supabase/tests/tgu_confirmed_fiscal_prefix.sql`, integrada en
+  `scripts/validate-audit-sql.mjs` y el runner propio de Demo.
+- Validación: consulta remota de solo lectura; migración real con fixtures y
+  rollback en ambas bases locales; 31 suites SQL/RLS principales y siete Trial
+  aprobadas. Verifica invariantes de CAI/SPS, auditoría,
+  idempotencia, bloqueo por factura existente, código desconocido y reactivación
+  de prefijo incompatible. TypeScript en ambos árboles y lint de los runners
+  aprobados; paridad de 540 fuentes compartidas, 26 variantes, sin desvíos.
+  El propietario autorizó expresamente aplicar y conservar el historial,
+  incluyendo la desactivación de los tres rangos TGU incompatibles.
+  Ensayos remotos con rollback y aplicación atómica en ambos ambientes:
+  131/134 tablas verificadas, todas con RLS; usuarios, permisos, funciones,
+  documentos e historial de migraciones anteriores conservados. Fuente aplicada
+  idéntica a la confirmada en Git. Producción conserva siete CAI y sus números:
+  solo desactiva tres TGU, registra tres eventos y una rectificación de oficina.
+  Pruebas conserva cero CAI y toda su configuración propia, sin datos copiados.
+- Commits funcionales: main `0280ca6`, Demo `a5bd22a`. La aplicación SQL está
+  terminada; no se modificó código de interfaz. La CI Quality versionada ejecuta
+  estas regresiones en bases desechables. Pendiente operativo: registrar la
+  autorización SAR TGU `000-000` y realizar UAT con Contabilidad; no se inventan
+  nuevos CAI, rangos, fechas ni siguientes números para reactivar la emisión.
+
+### 2026-10-28 - RELEASE-FIN-20261028 - Publicación coordinada de finanzas, CAI y UX
+
+- Estado: SQL y frontend publicados en Producción y Pruebas; CI y smoke aprobados.
+  Aceptación autenticada con Contabilidad y configuración operativa pendientes.
+  Registro: `docs/release/accounting-finance-cai-2026-10-28.md`.
+- Alcance: FIN-REP-01, FIN-BANK-01/02, CAI-OFFICE-01, CAI-MASTER-01,
+  CAI-ACCESS-01 y UX-SELECT-01. Seis migraciones nuevas, SQL antes del frontend.
+- Baseline remoto renovado: Producción 113 tablas con RLS y siete rangos fiscales;
+  máster individual preexistente elegible. Pruebas 116 tablas con RLS, sin CAI ni
+  máster; configuración propia, sin copiar usuarios reales. Ambas ramas coinciden
+  con sus referencias remotas y la paridad compartida está aprobada.
+- Validaciones: 504/510 Node, 30/6 SQL/RLS con rollback, TypeScript, compilaciones,
+  lint y navegador. Ensayos remotos con rollback y aplicación atómica por ambiente:
+  seis fuentes SQL verificadas contra los commits; 113/116 tablas originales
+  preservadas, usuarios/máster/CAI íntegros, solo reparación TGU y su auditoría.
+  Postflight: 131/134 tablas públicas con RLS; ninguna función compartida ausente,
+  40 funciones nuevas idénticas. Sin bancos, saldos o permisos de oficina sembrados.
+  CI main `40780475897`, Demo `40780480535` y paridad `40780480542` aprobados.
+  Vercel Ready en ambos; smoke de 22/28 rutas, noindex/bloqueos Demo, API bancaria
+  anónima 401 y manifest de dominio idéntico al deployment inmutable.
+- Emisión: conservar máster actual; las oficinas de los demás usuarios se
+  habilitan individualmente desde Configuración. Sin asignaciones inferidas.
+  UAT con Contabilidad y configuración operativa quedan explícitos. Commits
+  funcionales: main `fdf54c5`, Demo `0d74b67` (incluyen `62b5954` / `d2ddf96`).
+
+### 2026-10-28 - CAI-RELEASE-01 - Discrepancia de punto SAR detectada antes de publicar
+
+- Estado: SQL aplicado y verificado en ambos ambientes; reparación TGU auditada
+  únicamente en Producción. Ningún CAI, rango o correlativo fue modificado.
+- El preflight actual encontró TGU `000-000`, mientras todos sus rangos tienen
+  `000-001`, confirmado previamente por el propietario. `20261028150000` estaba
+  pendiente en ambos ambientes; se refuerza antes de su primera aplicación.
+- Solo se admite ese error conocido en la oficina Sari indicada, con rangos y
+  documentos compatibles y sin otro dueño del prefijo. Los códigos no confirmados
+  siguen rechazados. Reparación auditada en `activity_logs`, actor administrativo
+  sin identidad humana; no altera CAI, fechas, estados ni siguientes números.
+- `cai_office_backfill.sql` reproduce la migración canónica real en base desechable,
+  verifica datos CAI completos y auditoría, y rechaza un código no confirmado.
+  Runners main/Demo incorporan la fuente conservando sus delimitadores SQL.
+  Casos de códigos vacíos/error confirmado/rechazo y 30/6 suites SQL con rollback.
+  Fuente frontend sin cambios; no repite cambios de diseño o cálculos.
+- El release comparó todas las filas originales y admitió solo la auditoría nueva
+  de la reparación esperada. CI y smoke aprobados; UAT con Contabilidad pendiente.
+  Hashes funcionales: `fdf54c5` / `0d74b67`.
+
+### 2026-10-28 - UX-SELECT-01 - Selectores y paneles de configuración compactos
+
+- Estado: publicado en main y Pruebas, build/CI/smoke aprobados; revisión con
+  usuario pendiente. Este ajuste no modifica SQL, permisos ni cálculos financieros.
+- Hallazgo: el formulario CAI se extendía al ancho disponible; el tipo ocupaba
+  ambas columnas y su menú nativo producía un panel blanco desproporcionado.
+  Inventario estático posterior: 222 selectores nativos restantes en 70 archivos.
+- `CompactSelect.tsx` reutiliza `useDropdownPosition`: trigger/panel hasta 448 px,
+  menú hasta 280 px con desplazamiento y opciones legibles, búsqueda por nombre
+  y datos secundarios, teclado/foco y estado deshabilitado. Dentro de diálogos
+  se mantiene en el árbol del modal para conservar la interacción y Escape.
+- Nueve controles migrados: oficina/tipo CAI, máster, usuario autorizado, tipo
+  fiscal y monedas/operaciones de equivalencia/conversión, hoja del extracto.
+  `settings/cai/page.tsx`, `InvoiceMasterSettings.tsx`, `BillingOfficeAccessSettings.tsx`,
+  `InvoiceFiscalOptions.tsx`, `BankReconciliationWorkspace.tsx`.
+- `globals.css`: selectores simples nativos limitados a 448 px, conservando
+  formularios/validación nativa y ajuste al contenedor. Listas múltiples/size
+  explícito se conservan. Buscadores compartidos de clientes/agentes/cotizaciones
+  hasta 512 px; navieras hasta 448 px, sin mínimo de popup que desborde en móvil.
+- CAI: panel de edición hasta 768 px, fondo suave, cabecera/acento Sari, campos
+  en dos columnas y una en móvil. Avisos y panel de acciones también acotados.
+  Configuración de máster/oficinas y tratamiento fiscal usan paneles compactos.
+- Validación: TypeScript y cinco pruebas del componente (teclado, búsqueda con
+  acentos/datos secundarios, diálogo, bloqueo y Escape capturado antes del cierre
+  del modal) aprobados. Suites completas: 504 Node main y 510 Pruebas. Lint dirigido
+  de 14 archivos sin regresiones y build aprobados en ambos árboles. Navegador:
+  ocho verificaciones locales con datos ficticios; CAI en 1676/1440/390 px, menú
+  fiscal de 355 × 254 px en escritorio y 324 × 254 px en móvil, selección/foco,
+  búsqueda, validación nativa requerida, usuarios y diálogo real de proforma;
+  sin excepciones JavaScript. Los controles y menús caben en el ancho solicitado.
+  Paridad: 539 archivos compartidos, 26 variantes revisadas, cero diferencias
+  inesperadas. Diff check aprobado. Guía: `docs/quality/compact-selects-uat.md`.
+- Pendiente: revisión con usuario en su navegador. Hashes funcionales:
+  `fdf54c5` / `0d74b67`; fuente UX incluida en `62b5954` / `d2ddf96`.
+
+### 2026-10-28 - CAI-MASTER-01 / CAI-ACCESS-01 - Correcciones, retiro y autorización individual por oficina
+
+- Estado: migraciones y frontend publicados en ambos ambientes; RLS, CI y smoke
+  aprobados. Configurar autorizaciones por usuario y UAT real pendientes.
+  No se corrigió por inferencia ninguna fecha real del SAR.
+- `20261028160000_cai_master_lifecycle.sql`: solo el máster individual designado
+  puede registrar, corregir, activar, desactivar o eliminar CAI de su empresa.
+  RLS mantiene la política restrictiva de aislamiento por tenant; Admin y
+  Contabilidad sin designación no reciben escritura. Las RPC compatibles de
+  activación también exigen máster; funciones internas sin acceso autenticado.
+- Edición con motivo/revisión: fecha y rango corregibles, siguiente correlativo
+  conservado cuando hay uso, identidad/prefijo/inicio y números utilizados protegidos.
+  Una fecha corregida a vencida deja el CAI inactivo. Una renovación con otro
+  CAI se registra aparte. No se recalculan snapshots de documentos emitidos.
+- Eliminación lógica: requiere desactivar, conserva la fila y su consumo como
+  historial de solo lectura; DELETE físico bloqueado. `cai_range_events` registra
+  actor, motivo, fecha/hora, valores anteriores/nuevos y consumo. Sin escrituras
+  autenticadas al historial. Pantalla muestra los últimos 100 movimientos.
+- `20261028170000_user_fiscal_office_access.sql`: autorización por usuario y
+  oficina mediante RPC exclusiva del máster, revisión y auditoría. El máster
+  administra todas las oficinas activas; los demás requieren selección explícita.
+  **Antes de habilitar emisión en el despliegue, autorizar oficinas a los usuarios
+  existentes.** No se infiere su sede ni se otorgan ambas oficinas por defecto.
+- Control de emisión en almacenamiento para Factura/NC/ND, boleta y retención:
+  conserva resolución fiscal existente (cliente/documento original) y valida
+  permiso del actor. Denegación revierte documento y consumo atómicamente.
+  Borradores/consulta mantienen permisos del módulo; no amplía roles financieros.
+- UI: `settings/cai/page.tsx`, `toggle-switch.tsx`, `permissions.ts`,
+  `InvoiceMasterSettings.tsx`, `BillingOfficeAccessSettings.tsx`, configuración
+  contable y formulario de nueva factura. Iconos con nombres accesibles, toggle
+  de estado, motivo/confirmación, edición de vencidos y advertencia recuperable
+  ante historial fallido; factura sin oficina autorizada puede guardarse borrador.
+- Pruebas: `cai_master_lifecycle.sql`, fixtures financieros con máster explícito,
+  `cai-lifecycle.test.mjs`, permisos y flujos de factura/borrador. 29 suites SQL/RLS
+  principales y cinco Trial aprobadas con rollback (incluida desactivación de un
+  CAI histórico activo/vencido). 499 pruebas Node main, 505 Trial y seis dirigidas
+  posteriores aprobadas. TypeScript, lint sin regresiones y build en ambos árboles
+  aprobados. Navegador local con datos ficticios: seis flujos de edición, estado,
+  retiro/historial, consulta sin máster y autorización individual; escritorio y
+  390 px sin desbordamiento ni errores de ejecución. Paridad local: 538 archivos
+  compartidos, 26 variantes revisadas, sin diferencias inesperadas. Git diff check
+  aprobado. Las bases desechables quedaron sin tablas nuevas tras rollback.
+- Pendientes: configurar autorizaciones reales y probar con Contabilidad
+  (corregir fecha contra autorización, activar,
+  apoyar ambas oficinas y verificar PDF). Guía en `docs/quality/cai-office-numbering.md`.
+  Sin datos de documentos fiscales modificados. Hashes: `fdf54c5` / `0d74b67`.
+
+### 2026-10-28 - CAI-OFFICE-01 - Prefijos y series fiscales por oficina/tipo
+
+- Estado: migración y frontend publicados en ambos ambientes; conservación de
+  numeración verificada. UAT con Contabilidad pendiente. Véase CAI-RELEASE-01.
+- Verificado en Producción y Prueba: asignación fiscal y activación filtran por
+  tenant, oficina y tipo; índice único activo por esa combinación. Factura,
+  NC/ND, boleta y retención no comparten contador entre oficinas. Guía de Remisión
+  tiene su serie configurable; su emisión no tiene interfaz propia todavía.
+- Hallazgo reproducido: registrar un rango con prefijo de SPS para TGU era
+  aceptado, aunque fallaba al emitir. También podían repetirse códigos SAR en
+  oficinas distintas o cambiarse los códigos dejando rangos incompatibles.
+- Verificación inicial: dos oficinas, códigos vacíos y solo Factura registrada
+  (SPS inactivo/TGU activo). El propietario confirmó SPS `001-001` y TGU `000-001`.
+  Al publicar ya había siete rangos; se preservaron. La migración completa campos
+  vacíos y la discrepancia TGU documentada en CAI-RELEASE-01 si todos los rangos
+  existentes siguen coincidiendo. No modifica CAI, rangos, correlativos, estado
+  activo ni documentos emitidos. Las autorizaciones de los demás tipos requieren
+  captura real; no se crean ni se deducen a partir del CAI de Factura.
+- SQL nuevo `20261028150000_cai_office_binding.sql`: valida prefijos en registro,
+  activación e incremento; impide duplicar códigos de oficina y alterar códigos
+  incompatibles con CAI/documentos. Cambios de oficina serializados por tenant;
+  emisión conserva sus RPC atómicas originales y sus bloqueos por oficina/tipo.
+- UI/helper: `settings/cai/page.tsx`, `cai-validation.ts`; prefijo/placeholder según
+  oficina y tipo, comprobación antes de escribir y descarte de cargas obsoletas.
+  Pruebas: `cai_office_numbering.sql`, fixtures de acceso/puntos de venta y pruebas
+  Node; runners SQL de main/Prueba. Cambios compartidos preparados en ambas ramas.
+- Validación: fallo original demostrado y suite nueva aprobada con diez emisiones
+  ficticias (cinco tipos × dos oficinas), doce series activas, rotación aislada,
+  NC de factura original y bloqueos de prefijo/códigos; 28 suites main y cuatro
+  Prueba con rollback. Ensayo real de migración sobre configuración ficticia con
+  códigos vacíos: comparación íntegra de CAI/contadores sin cambios. TypeScript,
+  lint sin regresiones y build aprobados en main y Prueba; 492 pruebas Node main,
+  13 dirigidas posteriores y 498 en Prueba aprobadas. Navegador con datos ficticios: prefijo cruzado
+  bloqueado antes de guardar, oficina/tipo correctos y formulario móvil sin
+  desbordamiento; sin errores de ejecución. Paridad local: 534 archivos
+  compartidos y 26 variantes revisadas, sin diferencias inesperadas.
+- Pendiente: probar con Contabilidad;
+  registrar las autorizaciones SAR faltantes por oficina/tipo y revisar activación
+  de rangos válidos. Sin emisión real ni cambios de numeración.
+  Hashes funcionales: `fdf54c5` / `0d74b67`.
+
+### 2026-10-28 - FIN-REP-01 / FIN-BANK-01 / FIN-BANK-02 - Plan de cartera, Caja/Bancos y conciliación
+
+- Estado: etapas 1–5 publicadas en ambos ambientes; controles automatizados de
+  etapa 6 y SQL/CI/smoke aprobados. UAT autenticado y configuración de saldos/cuentas
+  pendientes; no se declara cierre operativo.
+- Plan y decisiones: `docs/plans/contabilidad-caja-bancos-20261028.md`; mora por
+  vencimiento (Actual no vencido), Excel con bloques en una hoja y únicamente
+  firmas físicas. Guía de UAT/publicación en `docs/quality/finance-reporting-banks-uat.md`.
+- SQL canónico nuevo: `20261028120000_finance_reporting_history.sql`,
+  `20261028130000_treasury_accounts_and_cash.sql`,
+  `20261028140000_bank_reconciliation.sql`. No se cambia SQL aplicado.
+  Historial/operaciones protegidos por tenant y rol financiero activo/aprobado;
+  tablas de solo lectura autenticada, escrituras por RPC atómicas, fuentes con
+  idempotencia y reversos auditados. Funciones internas sin grants públicos.
+- Reportes compartidos en `finance-report`, `financial-export`, `treasury-report`,
+  `report-layout`, `xlsx`, hooks y workspaces de Contabilidad. CxC/CxP al corte,
+  NC/ND y retenciones, pagos alcanzables en filtros, saldos corridos e históricos,
+  monedas separadas, XLSX/PDF/CSV completos. Consolidado incluye recibos/anticipos
+  una vez; Documentos solo descuenta pagos aplicados. Filtros de tipos conservan
+  el saldo completo. Se conserva el resumen rápido actual de Facturación, con
+  acceso explícito al reporte completo para corte/antigüedad/exportaciones.
+- Caja/Bancos: apertura fechada sin semillas reales, tasas compra/venta y aplicada
+  congeladas, banco/caja en recibos y pagos, retenciones sin efectivo, transferencias
+  propias fuera del flujo externo, contabilización/reversos sobre el motor existente.
+  Cobro reversado antes de contabilizar registra original y reverso atómicamente.
+  No se activa contabilidad automática ni se altera moneda de cotizaciones.
+- Conciliación: extractos manual/CSV/XLSX con vista previa, archivo limitado y
+  parseo sin fórmulas/macros/vínculos; integridad ZIP, privacidad de API/tenant,
+  detección de repetición/solapamiento con motivo para coincidencias aceptadas.
+  Vínculos parciales/grupales no vuelven a contabilizar. Reportes versionados con
+  cheques, depósitos, otras salidas, diferencia visible, nombres/líneas de firma;
+  resumen general de conciliaciones. No existe flujo de aprobación bancaria.
+- UX: componentes/combobox reutilizados, errores recuperables, exportación con
+  encabezado/colores Sari, ancho PDF dentro de página, navegación móvil compacta.
+  El ensayo de navegador usa exclusivamente datos ficticios y exportaciones locales.
+- Validación final: 491 pruebas Node main y 497 Prueba (APP_ENV demo), 27 suites
+  SQL/RLS main y tres Prueba con rollback. TypeScript, lint (223 diagnósticos
+  históricos, cero regresiones) y build aprobados en ambas ramas. Build local
+  Prueba con claves ficticias inutilizables y guardas de proyecto/dominio vigentes;
+  no acredita autenticación remota. Paridad: 533 archivos compartidos, 26 variantes
+  revisadas, cero diferencias inesperadas. Sin cambios persistentes en los ensayos.
+  Navegador con compilación estable y datos ficticios: siete comprobaciones,
+  escritorio 1500×1000/móvil 390×844, descargas PDF/XLSX y cero errores. Renderer
+  financiero real: fila 505, columnas dentro de página y firmas en la última;
+  XLSX de 650 filas, una hoja, subtotales, números, filtros y títulos de impresión.
+  Se puede completar una contrapartida inicial omitida; se bloquea otra cuenta
+  bancaria como contrapartida para evitar saldos contables sin movimiento nativo.
+- Riesgos/pendientes: definir saldos, cuentas y fecha reales; revisar cuentas con
+  movimientos previos antes de vincularlas; cobertura anterior reconstruida no
+  certifica cortes más antiguos. Abrir Excel/firmar PDF, extractos representativos,
+  UAT real. Publicación coordinada verificada; hashes funcionales:
+  `fdf54c5` / `0d74b67` (incluyen `62b5954` / `d2ddf96`).
+
+### 2026-10-28 - DEMO-PARITY-002 - Alinear Prueba con Producción sin mezclar entornos
+
+- Estado: SQL y frontend publicados y verificados en ambos entornos; CI de
+  aplicación y SQL/RLS aprobados. UAT autenticado pendiente.
+- Commits funcionales: Production `8bf64c3`; Demo `b46aec4` (sincronización)
+  y `62ea8e2` (marcas de impresión). Cierre documental en commit posterior.
+- Inventario inicial real: Production del 27/10, 147 migraciones/110 tablas;
+  Demo del 01/10, 88 migraciones/91 tablas, con 98 commits de main ausentes.
+  Resultado: 148 migraciones compartidas, más 11 exclusivas de Demo. Todas las
+  tablas públicas tienen RLS: 113/113 Production y 116/116 Demo.
+- SQL: una migración nueva en Production y 71 ausentes en Demo, incluidas cinco
+  adaptaciones exclusivas (`20260731190100`, `20261014152900`, `20261014153100`,
+  `20261020115900`, `20261028110000`). Aplicadas antes de cada frontend;
+  hashes 71/71 verificados contra SQL confirmado. Sin repair ni reset remoto.
+- Preservación atómica: 110 tablas existentes/autorización en Production; en
+  Demo, 89 tablas/columnas originales, incluidos documentos, importes, clientes,
+  perfiles y cotizaciones. Se comparan por clave los catálogos originales, con
+  adiciones previstas; se permite logo ficticio y timestamps. Contadores nuevos
+  inicializados sin emitir documentos. Auth e identidades de Demo preservados.
+- Conserva separación de bases/usuarios/claves, Atlas, JWT/grants temporales,
+  términos, caducidad, noindex, Storage privado/bloqueado, correo e invitaciones
+  bloqueados. Configuración fiscal/contable editable en el tenant ficticio y
+  flujo Factura/Proforma compartido. Master real designada solo en Production.
+  HBL/cotización conservan prefijo Demo con contadores por tenant. El
+  aprovisionador asigna/verifica tenant; no se aprovisionaron usuarios nuevos.
+- Reset legacy retirado: su allowlist/seed no cubría multiempresa/contabilidad.
+  Se preservó el dataset remoto; falta diseñar/probar un sustituto antes de
+  ejecutar un reset futuro con autorización explícita. Outlook sigue en espera.
+- Funciones comparadas en vivo: ninguna compartida ausente, 363 idénticas y
+  nueve variantes revisadas de prefijos/protecciones Demo. Código: 513 archivos
+  compartidos, 26 variantes con hashes revisados, cero diferencias inesperadas.
+- PDF/HTML: marca real en cada página y en ventanas independientes de cierre,
+  embarques, seguro y FCL mediante `withDemoPrintWatermark`; impresión idempotente.
+- Validación: 474 pruebas Node y 26 suites SQL/RLS Production (CI `40715647354`);
+  480 pruebas Node y dos suites SQL/RLS Demo (CI `40722799987`). Demo ensayada
+  desde esquema real con dataset ficticio, sobre la base remota con rollback y
+  desde instalación limpia de 160 migraciones en CI. TypeScript/lint/build
+  aprobados; 223 diagnósticos históricos, cero regresiones. Smoke sin sesión:
+  24 rutas Production/plataforma y 24 Demo, más comprobación de borradores y
+  bloqueo de correo; manifest coincidente con los deployments inmutables.
+- Archivos: cinco migraciones Demo, suite/runner SQL, workflow Quality Demo,
+  gates/layouts, proxy, branding, tipos, componentes PDF/HTML, aprovisionador,
+  pruebas y `docs/quality/environment-parity.md`. `Environment parity` compara
+  ambas ramas en cada push, sin secretos ni acceso a bases; manifiesto y script
+  rechazan diferencias no revisadas. No se publican huellas privadas ni PDFs reales.
+- Pendientes: UAT con usuarios reales, acceso temporal Demo vigente cuando se
+  requiera y nuevo procedimiento de reset. Pruebas locales/CI y HTTP sin sesión
+  no sustituyen aceptación funcional autenticada.
+
 ### 2026-10-28 - FIN-DRAFT-01 - Borrador previo a emisión y corrección aprobada por master
 
 - Estado: publicado en Production el 28/10/2026; migración y designación master
@@ -15186,3 +16746,432 @@ Agregar una entrada por fix:
   Alias `sari.forwarders.app` verificado contra ese despliegue. Smoke sin sesión:
   login 200 y pricing 307 a login. No se ejecutó SQL ni se crearon datos de
   negocio. Quality CI `39635482978` en ejecución al cerrar este registro.
+
+### 03/11/2026 - OCR-422-01 - Lectura OCR no se descarta por un campo inválido
+
+- Estado: validado localmente y publicado en Production; reintento autenticado con 131929.pdf pendiente.
+- Hallazgo: `POST /api/manual-invoices/ocr` devolvía 422 («El OCR devolvió datos
+  que requieren una nueva lectura») con la factura 131929. Anthropic respondía,
+  pero un solo campo con salto de línea (dirección Bill to en varias líneas),
+  exceso de longitud, fecha no ISO o importe ilegible invalidaba toda la lectura.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: `sanitizeOcrInvoice` normaliza saltos de línea a espacios y deja vacío,
+  con aviso en español, el campo largo, la fecha no ISO o el importe ilegible.
+  Fechas imposibles, respuestas truncadas/rechazadas y JSON inválido siguen en
+  422. Los rechazos registran `manual_invoice_ocr_invalid` con el motivo, sin
+  datos del documento.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs`
+  48/48, incluido el caso nuevo de campos multilínea/largos/ilegibles.
+- Riesgos / pendientes: reintentar 131929.pdf en Production; si persiste el 422,
+  revisar el motivo en el log `manual_invoice_ocr_invalid`.
+- Commit funcional: `2692cdef6f1b1a1daa1e6183d079b95e38671861`, en `origin/main`.
+- Publicación: Vercel Production `dpl_GtTYSbPiLoGY2pA7x5weEwui8rkR`, `READY`;
+  URL `https://sarierp-2epdr7odz-claudherhn-5641s-projects.vercel.app`. Alias
+  `sari.forwarders.app` verificado contra ese despliegue; smoke sin sesión:
+  `/manual-invoices` 307 a login. No se ejecutó SQL.
+
+### 03/11/2026 - OCR-422-02 - Respuesta OCR vía gateway con JSON envuelto
+
+- Estado: validado localmente; publicación en Production en curso con este commit.
+- Hallazgo: tras OCR-422-01 la factura 131929 seguía en 422 sin log
+  `manual_invoice_ocr_invalid`; el fallo estaba en `JSON.parse`. Con el gateway
+  AI STAR (`9940f56`) la respuesta puede llegar envuelta en bloque Markdown o con
+  texto alrededor, porque el gateway no garantiza structured outputs.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: `parseOcrJson` acepta JSON directo, en bloque ```json``` o rodeado de
+  texto; respuestas sin objeto JSON siguen en 422 y registran
+  `manual_invoice_ocr_unparsable` (gateway, stop_reason, longitud y tipos de
+  contenido; sin datos del documento).
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 49/49.
+- Riesgos / pendientes: reintentar 131929.pdf en Production. AI STAR es un
+  intermediario de terceros que recibe las facturas: confirmar que su uso está
+  autorizado para estos datos.
+
+### 03/11/2026 - OCR-422-03 - Reintento ante respuesta en prosa y facturas multipágina
+
+- Estado: publicado en Production con el despliegue de OCR-ISSUER-01; reintento con PDF de 2 páginas pendiente.
+- Hallazgo: con OCR-422-02 publicado, la misma factura 131929 (2 páginas) se leyó
+  bien a las 18:52:09 y falló a las 18:52:54: `manual_invoice_ocr_unparsable`
+  vía AI STAR, `end_turn`, 431 caracteres sin JSON. El gateway no garantiza
+  structured outputs y el modelo responde a veces en prosa.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: si la respuesta no contiene JSON, se reintenta una vez con instrucción
+  explícita de claves JSON; el log incluye `attempt`. Las instrucciones aclaran
+  que una factura puede continuar en varias páginas (PAGE 1 OF 2) y sus cargos
+  se combinan. El reintento consume una llamada más al proveedor, sin cupo extra.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 50/50.
+- Riesgos / pendientes: publicar y reintentar 131929.pdf varias veces. La causa
+  de fondo es el gateway; con clave directa de Anthropic el formato es garantizado.
+
+### 03/11/2026 - OCR-ISSUER-01 - Correo del emisor SARI USA opcional
+
+- Estado: SQL aplicado y publicado en Production; prueba autenticada de generar y guardar 131929 pendiente.
+- Hallazgo: el generador no emitía el PDF («Completa el emisor SARI USA») porque
+  exigía correo del emisor, que la factura SARI USA original no imprime y que la
+  empresa no tiene. Configuración de empresa ya tenía razón social, dirección,
+  teléfono y sitio web.
+- Archivos: `src/lib/manual-invoice.ts`, `tests/manual-invoice.test.mjs`,
+  `supabase/migrations/20261103120000_manual_invoice_issuer_optional_email.sql`
+  y este registro.
+- Cambio: el correo pasa a opcional en el validador del navegador y en el trigger
+  `capture_manual_invoice_issuer`; razón social, dirección y teléfono siguen
+  siendo obligatorios. El PDF ya omite líneas vacías.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 51/51.
+- Riesgos / pendientes: aplicar la migración en Production (sin ella, generar el
+  PDF funciona pero guardar en historial seguirá fallando) y publicar con
+  `vercel deploy --prod`; luego generar y guardar 131929.
+- SQL: solo `20261103120000_manual_invoice_issuer_optional_email.sql`, ejecutado con
+  `supabase db query --linked -f` y registrado con `migration repair --status applied`.
+  Verificado en `pg_proc`: el trigger ya no exige `usa_email`. No se aplicó
+  `20261002120000_sari_outlook_intake.sql`, que `db push --dry-run` reporta
+  pendiente fuera de orden; requiere revisión aparte.
+- Publicación (OCR-422-03 y OCR-ISSUER-01): commits `dd7c9e1` y `b305807`; Vercel
+  Production `dpl_EUjq9EvR2XP3izu846aaPiPKFUsA`, `READY`, alias
+  `sari.forwarders.app` verificado; smoke sin sesión `/manual-invoices` 307 a login.
+
+### 03/11/2026 - OCR-PDF-01 - PDF multipágina enviado como imágenes por página
+
+- Estado: validado localmente; publicación en Production con este commit.
+- Hallazgo: con el PDF de 2 páginas de 131929 la lectura devolvía campos vacíos
+  («No se identificó una factura legible»). El log mostró 568 tokens de entrada:
+  el gateway AI STAR no entrega bloques `document` PDF al modelo; con imágenes
+  sí funciona (la página 1 sola se leyó y avisó que faltaba la página 2).
+- Archivos: `src/lib/browser/manual-invoice-ai.ts`,
+  `src/app/api/manual-invoices/ocr/route.ts`, `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: en «Leer con IA» el navegador renderiza cada página del PDF (máx. 5)
+  a JPEG de 1500 px de ancho, con calidad decreciente hasta que el conjunto quepa
+  en 3 MB. La API acepta un PDF/imagen o hasta 5 imágenes de página y las envía
+  en orden como bloques de imagen; las instrucciones indican que son una sola
+  factura. El cupo diario sigue contando una lectura por documento.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 52/52.
+  El render en navegador no tiene prueba automatizada: requiere prueba manual.
+- Riesgos / pendientes: leer 131929.pdf completo en Production y comparar cargos y total.
+
+### 04/11/2026 - FLOW-038 - Seleccionar primera tarifa FCL con cargos anticipados
+
+- Estado: revisado y revalidado para publicacion exclusivamente en Production;
+  migracion remota y UAT autenticado pendientes. Demo excluido expresamente por
+  el usuario para evitar nuevos deployments. Commit: pendiente al registrar.
+- Hallazgo: agregar DTHC o entrega local antes de seleccionar la primera tarifa
+  FCL activaba el resguardo de reemplazo de flete. La RPC exigía que ya existieran
+  líneas de flete/EXW y rechazaba la selección con «Las líneas de flete cambiaron».
+- Archivos y SQL:
+  - `supabase/migrations/20261104120000_fcl_initial_agent_selection.sql`.
+  - `supabase/tests/fcl_initial_agent_selection.sql`.
+  - `scripts/validate-audit-sql.mjs` y este registro.
+- Cambio: la primera selección FCL conserva los cargos existentes y agrega solo
+  las líneas de flete/EXW faltantes. Si una línea ya existe, exige coincidencia
+  única de tipo, descripción, cantidad y moneda; actualiza únicamente costo y
+  proveedor, conservando ID, venta, ISV, total y notas. Duplicados e
+  incompatibilidades abortan la transacción. Selecciones posteriores mantienen
+  los resguardos de composición existentes. No cambia el comportamiento de otras
+  modalidades, los permisos ni los snapshots ofrecidos. La auditoría registra
+  si fue primera selección y cuántas líneas se agregaron.
+- Validaciones ejecutadas:
+  - Fallo original reproducido con la nueva prueba antes de modificar la RPC.
+  - Migración aplicada exclusivamente a `supabase_db_sarierp_accounting27_replay`,
+    con historial base de 146 migraciones hasta `20261027220000`.
+  - `fcl_initial_agent_selection.sql`: aprobado con `ROLLBACK`; cargos de destino
+    idénticos, dos tipos de contenedor, EXW, flete previo parcial, reintento sin
+    duplicados, cambio de agente conservando venta, selección única, snapshots
+    intactos, rollback por cantidad/moneda/duplicados, denegación a Ventas,
+    usuario inactivo, otra empresa y anon.
+  - `air_consolidated_agent_selection.sql`, `aud01_pricing_write_permissions.sql`
+    y `quotation_commercial_options.sql`: aprobadas con `ROLLBACK`.
+  - `npx.cmd tsc --noEmit`, ESLint del runner y `git diff --check`: aprobados.
+  - `npm.cmd test`: 605/605 pruebas aprobadas.
+  - Revalidacion de release 04/11/2026: migracion y las cuatro regresiones SQL
+    anteriores repetidas en el contenedor aislado; 605/605 pruebas, TypeScript,
+    ESLint del runner y diff check OK. Production confirma migracion ausente.
+- Límites / pendientes:
+  - `phase3_commercial_tenant_isolation.sql` es incompatible con el guard de
+    transiciones vigente: falla con «Usa la acción de transición y recarga la
+    cotización». Se reprodujo el mismo fallo con la RPC anterior dentro de una
+    transacción revertida; no es una regresión de este cambio. AUD-01 y la nueva
+    prueba verifican los permisos pertinentes.
+  - Aplicar únicamente la migración nueva en Production; no se modificó la base
+    remota. Probar en Cards y Tabla: agregar DTHC/entrega, seleccionar la primera
+    tarifa, cambiar agente, recargar y revisar venta/ISV y PDF.
+  - La paridad con Demo quedara pendiente por esta migracion mientras Demo
+    permanezca sin actualizar por decision explicita del usuario. No se
+    deshabilita el control ni se copia SQL o configuracion a Demo.
+
+### 12/11/2026 - UX-MIAMI-INS-03 - Importe de seguro compacto y protegido del scroll
+
+- Estado: publicado en Production el 12/11/2026. Validacion visual sintetica y smoke publico aprobados; UAT autenticada pendiente.
+- Hallazgo: el valor comercial/FOB ocupaba todo el ancho y el input numerico nativo podia cambiar al desplazar la pagina con el campo enfocado.
+- Cambio: FormField con ancho maximo de 240 px y NumberInput en QuotationInsuranceSection. NumberInput compartido libera el foco al recibir la rueda, sin cancelar el scroll de pagina; conserva el callback onWheel del consumidor.
+- Archivos: src/components/quotations/QuotationInsuranceSection.tsx, src/components/ui/NumberInput.tsx, tests/number-input.test.mjs, HARDENING.md. SQL: ninguno.
+- Validaciones: 21/21 pruebas dirigidas (NumberInput y miami-insurance*) con concurrencia 1; ESLint de ambos componentes correcto; git diff --check correcto. Build compilo pero fallo en su etapa TypeScript por falta de memoria; npx tsc --noEmit paso en el reintento final secuencial.
+- Evidencia adicional de release: componente real con React y Tailwind, datos ficticios en Chrome a 1280/1042/768/390 px: ancho 240 px, sin overflow, rueda desplaza 160 px sin modificar 2365.80 y libera foco. Suite general: 607 pruebas OK y 7 archivos interrumpidos por memoria; esos 7 archivos repetidos por separado dieron 29/29 OK (636 pruebas en total). Evidencia privada fuera de Git en .ua/intermediate/miami-insurance-browser-20261112/. Se publica desde origin/main aislado, sin cambios de Compras ni migraciones locales.
+- Pendientes/riesgos: UAT autenticada del formulario completo en Production; el scroll retira el foco del campo. La proteccion compartida cubre consumidores de NumberInput, no todos los inputs numericos legacy. No cambia calculos, impuestos ni persistencia del seguro.
+- Commit funcional publicado: 7c681be8bcfd19a1a33390210f07c6871aa337e8. Vercel 8Zgdmkswpj86Cb91uceUaW5Zq2Pa: despliegue Production success; URL sarierp-o2b8gtyhw-claudherhn-5641s-projects.vercel.app. Quality 43294231967: application/database success, 635/635 tests, TypeScript, lint, build/postbuild aprobados. Smoke sari.forwarders.app: /login 200, /quotations/new 307 al login. Sin migracion SQL ni escrituras de datos reales. Environment parity 43294232199 falla por diferencias main/Trial; Trial no actualizado. CLI Vercel inspect no disponible por token invalido; estado confirmado mediante GitHub deployment 7747970801 y status Vercel.
+### 16/11/2026 - QUOTE-MIAMI-AIR-01 - Peso facturable en Miami aereo
+
+- Estado: implementado localmente; publicacion y UAT autenticada pendientes. Sin cambios en datos reales ni SQL.
+- Hallazgo: creacion/edicion y recalculo de Pricing cobraban solo peso real, omitiendo volumen. Se reutiliza getAirChargeableWeights (divisor 6000) en un calculador compartido con los minimos vigentes: menos de 22 kg USD 270, de 22 a 40 kg USD 375, sobre 40 kg tarifa por kg. Los umbrales usan peso facturable. La calculadora muestra peso volumetrico y facturable; conserva el peso real del embarque.
+- Archivos: src/lib/miami-air-calculator.ts, src/hooks/useMiamiQuotation.ts, src/components/quotations/MiamiQuotationSection.tsx, src/app/(protected)/pricing-comparison/page.tsx, tests/miami-air-calculator.test.mjs y HARDENING.md. SQL: ninguno.
+- Validaciones: TypeScript aprobado; seis pruebas dirigidas aprobadas, incluido fixture sintetico 52.2 kg / 40 x 40 x 48 pulgadas / USD 2.70 por kg: 209.75 kg facturables y USD 566.34, peso real dominante, umbrales 22/40 kg, volumen dominante que cambia tramo, carga cero y tarifa superior al minimo. Suite completa 648/648 aprobada con concurrencia 1; build/postbuild aprobados (115 paginas); git diff --check OK. ESLint directo mantiene deuda historica: 45 diagnosticos en archivos afectados. lint:ci reporta 215 diagnosticos y una falsa regresion por numero de linea incrustado en el aviso exhaustive-deps (555 vs ubicacion anterior); comparacion del hook con HEAD normalizando solo ubicacion/texto de extractos confirma los mismos 7 diagnosticos, sin nuevas reglas ni severidades. No se modifico la linea base.
+- Pendientes/riesgos: UAT de crear, editar, recalcular y PDF con sesion real; cotizaciones guardadas conservan sus importes hasta edicion/recalculo explicito. Con volumen se conserva el tramo sobre 40 kg sin minimo; sin volumen se aplica el piso base autorizado el 16/11. Sin commit ni despliegue.
+
+### 16/11/2026 - QUOTE-MIAMI-AIR-02 - Minimo base sin volumen
+
+- Estado: implementado localmente; publicacion y UAT pendientes.
+- Regla autorizada: sin dimensiones ni CBM, el calculo por peso no baja del minimo base configurado (USD 270). Conserva el minimo mayor de USD 375 del tramo 22-40 kg y los importes por peso que superen el minimo. Con volumen mantiene el calculo volumetrico y los tramos existentes. Carga cero no genera flete.
+- Archivos: src/lib/miami-air-calculator.ts, tests/miami-air-calculator.test.mjs, HARDENING.md. SQL: ninguno. Creacion, edicion y recalculo consumen el calculador compartido.
+- Validaciones: TypeScript y ESLint de archivos afectados aprobados; 7/7 pruebas dirigidas aprobadas, incluidos 52.2 kg sin volumen = USD 270, 150 kg = USD 405, 30 kg = USD 375, 1 CBM = USD 450 y carga cero. Build/postbuild aprobados (115 paginas); git diff --check aprobado.
+- Pendientes: despliegue y UAT autenticada; no se modificaron cotizaciones reales ni se ampliaron validaciones de formularios para admitir lineas sin volumen. Sin commit.
+
+- Preparacion de release 16/11: commit funcional 5b4ba73 aplicado sobre origin/main 661ab77 en checkout aislado. TypeScript y lint:ci aprobados (595 archivos, 215 diagnosticos historicos, cero regresiones). Se actualizo solo la ubicacion 584 -> 555 del aviso existente en docs/quality/lint-baseline.json; no se agregaron reglas ni tolerancias. Commits locales ajenos y Venex excluidos. Suite completa del checkout de release 642/642 aprobada con concurrencia 1.
+
+### 16/11/2026 - ACC-INVOICE-SERVICE-03 / ACC-DUE-DATE-01 - Preparacion de release aislado
+
+- Estado: commit 4ddb667 sobre Production e8f1b99; pendiente de aplicar SQL y publicar Production. Solo paquete contable, sin Pricing suppliers, SEC-026/027, Venex ni propuesta de ordenes.
+- Validacion actual: 645/645 pruebas en checkout aislado; npx tsc --noEmit y lint:ci aprobados (596 archivos, 215 diagnosticos historicos, cero regresiones). Ocho suites SQL en replica Docker terminaron con rollback y huella de funciones/datos identica.
+- Production: preflight confirma migracion 20261113120000 ausente y RLS activo; ensayo de migracion exacta y transaccion final con ROLLBACK aprobado. ACL, propietario, search_path y SECURITY DEFINER conservados; ocho huellas de tablas sin cambios. Aplicacion final preparada con guardas de versiones, hashes de funciones y registro atomico de la migracion.
+- Build local aislado: compila y TypeScript pasa; falta entorno Supabase y el enlace de dependencias afecta el tracing del postbuild OCR. Se valida build/postbuild en CI con dependencias independientes antes de Production; no se cambia codigo de OCR. Solo se retiro una linea vacia final de la migracion aun no aplicada.
+- Pendientes: CI completo del SHA exacto, migracion y despliegue Production, smoke y UAT autenticada de emision/PDF/asiento. Evidencia privada en .ua/intermediate/invoice-services-evidence-20261116/.
+
+### 16/11/2026 - ACC-PURCHASING-01 - Solicitudes y ordenes de compra
+
+- Estado: implementado localmente; SQL probado en replica con rollback. Migracion remota, publicacion y UAT autenticada pendientes. Ningun dato real ni documento fiscal fue modificado.
+- Alcance: Admin/Contabilidad activos y aprobados crean y aprueban, incluida la propia solicitud, con auditoria de actor. Borrador -> Pendiente -> Aprobada/Rechazada, cancelacion con motivo, revisiones optimistas, idempotencia y nueva aprobacion tras editar. Una solicitud aprobada genera una sola orden; tambien hay orden directa.
+- Referencia: PDF suministrado inspeccionado localmente (texto e imagen). PDF nuevo reutiliza el layout y rojo Sari de las facturas, logo corporativo, proveedor, oficina, fechas, condiciones, cantidades, costos, descuentos, ISV, referencia y total literal. Solo notas comerciales al proveedor; internas excluidas. Vistas previas con datos ficticios en .ua/intermediate/purchasing-20261116/. No se versiona ni publica el documento real.
+- Integridad: la solicitud/orden no consume CAI, no registra pagos ni crea deuda/asiento. Convertir a factura reutiliza create_purchase_document dentro de la misma transaccion que reserva las cantidades de la orden. Facturas parciales, remanente, descuento proporcional y residuo de centavos, bloqueo concurrente por documento y request id. Identificadores de otra compra no se reutilizan. Anulacion fiscal real desactiva consumos conservando historial; cancelacion de remanente no altera facturas previas.
+- SQL: supabase/migrations/20261116180000_purchase_requests_and_orders.sql crea documentos, eventos y asignaciones de cantidades; RPC atomica, helper de acceso y trigger de sincronizacion de anulacion. RLS/GRANT permiten solo lectura a los roles autorizados; sin DML directo. No modifica funciones fiscales existentes. Prueba supabase/tests/purchase_requests_and_orders.sql agregada al runner.
+- Archivos: src/lib/purchase-workflow.ts, src/lib/permissions.ts y workspace-breadcrumbs.ts, src/components/accounting/PurchaseWorkflowPage.tsx y PurchaseNavigation.tsx, rutas accounting/purchase-requests y purchase-orders, navegacion en accounting/purchases/page.tsx, src/components/pdf/purchase-workflow-pdf.tsx y campo opcional copy_legend en FiscalDocumentLayout.tsx (default fiscal conservado), tests/purchase-workflow*.test.mjs, scripts/validate-audit-sql.mjs, docs/purchase-orders-proposal.md y HARDENING.md. Sin librerias nuevas.
+- Validacion: suite general 656/656 aprobada antes del ultimo ajuste de resumen; regresiones finales 12/12 aprobadas (incluye PDF fiscal existente, permisos de ruta, fechas, remanentes con consumos guardados, reintentos/doble clic, cambio de identidad, PDF real multipagina/notas privadas y redondeo del impuesto por linea como el RPC). El resumen PDF usa los importes del snapshot persistido. SQL local positivo con rollback: solicitud/orden, autoaprobacion ambos roles, rechazo de revision obsoleta, RLS por rol/tenant, DML directo denegado, parcial/final, devolucion de cantidades mediante anulacion fiscal real, cancelacion de remanente y rechazo de compra ajena. TypeScript y ESLint enfocado aprobados; lint:ci: 607 archivos, 215 diagnosticos historicos, cero regresiones. Navegador: cinco verificaciones agrupadas aprobadas sobre pagina y componentes reales con sesion/DB ficticias: factura parcial/remanente, crear/enviar/aprobar y sin overflow de pagina a 1280/768/390 px; cero excepciones JavaScript. Capturas y PDFs ficticios inspeccionados. SQL local repetido con conteos y hashes de funciones identicos antes/despues del rollback. Build/postbuild final aprobado tras ajuste de centavos (117 paginas); tsc final aprobado. Servidor y Chrome de fixtures cerrados.
+- Pendientes: publicacion y aplicacion de SQL, UAT de crear/aprobar/facturar/anular con sesion real. Adjuntos privados y recepcion fisica corresponden a una etapa posterior; HNL/USD sin conversion de precios al facturar. Sin commit ni despliegue de este modulo. Venex y cambios previos ajenos conservados fuera del alcance.
+
+- Preparacion de release: commit original 6227b04; checkout aislado sobre 23615a3. PDF de vista previa verificado como PDF binario valido de una pagina, total HNL 893.00 y notas internas excluidas. Si se abre como texto (%PDF-1.3), corresponde usar un visor PDF; la descarga del ERP conserva MIME application/pdf. Sin archivos reales ni previews privados en el commit.
+
+- Validacion de release aislado 16/11: 653/653 pruebas, npx tsc --noEmit y lint:ci aprobados (604 archivos, 215 diagnosticos historicos, cero regresiones). Production preflight y migracion exacta ensayada con ROLLBACK: ocho huellas de tablas iguales, cinco funciones fiscales previas intactas, RLS activo y permisos de tablas/RPC verificados. Lectura posterior confirma que no quedaron objetos ni version de migracion del ensayo. CI remoto y aplicacion permanente aun pendientes.
+
+### 17/11/2026 - ACC-PURCHASING-02 - Cuentas de gasto y campos compactos
+
+- Estado: implementado localmente; publicacion y UAT autenticada pendientes. Sin SQL ni cambios de datos reales.
+- Hallazgo: solicitudes/ordenes reutilizaban el catalogo comercial y columnas iguales, mostrando servicios de venta y controles numericos demasiado anchos. Se reemplaza por cuentas contables Gasto activas/postables del tenant; Ingreso, agrupadoras e inactivas se excluyen. No se infiere una cuenta por prefijo: la naturaleza Gasto gobierna el filtro (en el catalogo revisado, 6 corresponde a gasto y 4 a ingreso).
+- Interaccion: seleccionar cuenta sugiere su nombre solo si la descripcion esta vacia o era el nombre de la cuenta anterior; conserva textos escritos por el usuario. Al guardar la edicion se retiran referencias comerciales del servicio, conservando cuenta, cantidades, precios, impuestos y notas. Borradores con cuenta no elegible solicitan elegir una cuenta de gasto; no se borran automaticamente ni se modifican snapshots historicos.
+- UI: cantidad/tasa 112 px, costo/descuento/tipo de cambio 160 px en escritorio, altura numerica 40 px. Cuenta y descripcion flexibles; fila de cortos con flex-wrap. Monto y moneda agrupados; ancho disponible en movil. La regla preexistente esta en skills/sari-erp-maintenance/references/ui-conventions.md, seccion Anchos de campos segun contenido (referida por SKILL.md); se agregan medidas explicitas de numeros para evitar repetir el problema.
+- Archivos: src/components/accounting/PurchaseWorkflowPage.tsx, src/lib/purchase-workflow.ts, tests/purchase-workflow.test.mjs, skills/sari-erp-maintenance/references/ui-conventions.md, docs/purchase-orders-proposal.md y HARDENING.md. Sin dependencias nuevas.
+- Validaciones: 10/10 regresiones dirigidas aprobadas, incluidos catalogo gasto vs ingreso, cuentas inactivas/agrupadoras, descripcion conservada y payload sin referencia comercial. TypeScript y ESLint enfocado aprobados. Navegador con pagina real y DB/sesion ficticias: solicitud y aprobacion, parcial/remanente; 1280/768/390 px sin overflow, cuenta de gasto seleccionada y ausencia del servicio comercial. Mediciones a 1280/768: cantidad 112, costo/descuento 160, altura 40. Capturas locales en .ua/intermediate/purchasing-20261116/. Ultimo ajuste visual verificado en Chrome; build/postbuild final aprobado (117 paginas), TypeScript y ESLint finales aprobados. Servidor y Chrome de fixtures cerrados.
+- Riesgos/pendientes: desplegar frontend y UAT autenticada con cuenta real de mantenimiento; la clasificacion y postabilidad del catalogo contable siguen siendo la fuente. El backend ya rechaza cuentas de ingreso; no se cambia SQL. Venex permanece fuera del alcance. Publicacion autorizada el 17/11/2026; release aislado en preparacion.
+# UX-FINANCE-FIELDS-01 — Medidas obligatorias para campos financieros (2026-11-17)
+
+- Estado: implementado y verificado localmente; pendiente de UAT autenticado y publicación. Sin commit ni despliegue.
+- Causa: las medidas estaban documentadas, pero cada página podía usar `NumberInput` genérico con `w-full` y columnas iguales; no existía una barrera de compilación o CI.
+- Cambio: `FinanceNumberInput` exige tipo semántico y no admite `className`, `style` ni `size`. Altura 40 px; cantidad/porcentaje/entero 112 px, importes/cambio 160 px, correlativos de texto 192 px, adaptación móvil. `finance-field-row` reserva espacio según contenido. Conserva edición decimal, límites, eventos y protección de rueda del control existente. El importe principal de recibo conserva presentación destacada con motivo explícito.
+- Archivos: `src/components/ui/{FinanceNumberInput.tsx,finance-fields.css,form-field.tsx}`, `src/app/globals.css`; rutas de accounting/{purchases,assets,journal,alerts}, invoicing/{new,[id],collections}, suppliers/{[id],types}, cost-validation/[id], settings/cai; componentes accounting/{PurchaseWorkflowPage,TreasuryWorkspace,BankReconciliationWorkspace,SupplierPayableDetail}, invoicing/{InvoiceFiscalOptions,ManualInvoiceEditor}, suppliers/SupplierForm. CAI conserva ceros iniciales; importes de documentos importados conservan texto con comas. FormField permite `financeSize` semántico para selectores cortos; ISV y tratamiento fiscal no se estiran.
+- Cumplimiento: `scripts/check-finance-ui.mjs`, `package.json` prebuild y `.github/workflows/quality.yml` rechazan controles genéricos, HTML numérico directo y overrides/spreads de geometría en todas las rutas/componentes financieros revisados. Sin baseline de excepciones. Estándar documentado en AGENTS.md y skill versionada.
+- Pruebas: `tests/finance-ui-standard.test.mjs`; adaptación de mocks en page-harness y supplier-payment-flow para seguir probando los flujos reales con el nuevo componente. Verificación Chrome del editor real de compras a 1280/768/390 px: medidas 112/160 × 40, sin desbordamiento; creación, envío, aprobación y facturación parcial con datos ficticios. Evidencia local `.ua/intermediate/purchasing-20261116/browser-report.json`.
+- Validación local: suite completa 662/662, regresión final dirigida 24/24; `npx tsc --noEmit`, `check:finance-ui`, lint:ci sin regresiones y build con postbuild OCR correctos. Evidencias de comandos en `.ua/intermediate/purchasing-20261116/finance-ui-*.log`.
+- SQL: ninguno. No cambia cálculos, permisos ni contabilización. Pendiente: UAT autenticado del resto de pantallas y publicación. El navegador con fixtures no acredita UAT en Production.
+- Commit: pendiente.
+
+### 17/11/2026 - QUO-MIAMI-DEST-01 - Tarifario Miami por cotización
+
+- Estado: implementado y validado localmente; publicación y UAT autenticada pendientes. Sin commit, migración remota ni despliegue.
+- Hallazgo: el cotizador y Pricing cargaban tarifas activas por código sin distinguir `miami_rate_destination`; dos destinos podían mezclarse. El perfil vinculaba la edición de tarifas a `preferred_miami_rate_destination`, obligando a cambiar la preferencia del cliente.
+- Cambio: selector compacto SPS/TGU para Miami LCL y Aéreo, valor inicial desde la preferencia del cliente y elección independiente por cotización. El destino guardado prevalece al editar/duplicar; cambiar cliente restablece su valor habitual. La ruta y sede no se alteran. Se muestra el destino tarifario en detalle y PDF/previsualización.
+- Resolución compartida: una fila explícita del destino prevalece sobre una global del mismo código; nunca se usa la fila de la otra ciudad. Las filas sin destino conservan su carácter global y no se duplican. Se requieren tarifas de flete configuradas para habilitar el cálculo/guardado; un cero explícito en componentes LCL es válido si el tarifario completo tiene al menos un componente positivo. No se cambian mínimos ni fórmulas de LCL/Aéreo. Los cargos manuales, seguro e ISV conservan sus reglas.
+- Perfil: selector para consultar/editar SPS o TGU sin escribir la preferencia, con carga/error/reintento, bloqueo durante lectura/guardado y confirmación al descartar cambios sin guardar. Guardado mediante la RPC atómica existente `replace_client_rates`; los otros cargos globales siguen compartidos. Cotizador descarta respuestas tardías de otro cliente y permite reintentar errores.
+- Pricing: filtra por destino persistido. Cotizaciones históricas sin destino requieren confirmarlo en edición antes de recalcular; no se actualizan masivamente ni se recalculan snapshots publicados como efecto lateral.
+- Archivos: `src/lib/{miami-rate-destination,miami-pricing-items,quotation-form}.ts`, `src/hooks/useMiamiQuotation.ts`, `src/components/quotations/MiamiQuotationSection.tsx`, rutas quotations/{new,[id]/edit,[id]}, clientes/[id], pricing-comparison y `src/components/pdf/quotation-pdf.tsx`; tests miami-rate-destination, miami-insurance-create y miami-insurance-pdf; registro en scripts/validate-audit-sql.mjs.
+- SQL: nueva migración `20261117180000_miami_quotation_rate_destination.sql`. Las columnas/constraints SPS/TGU ya existían. Extiende exclusivamente INSERT de la creación interna y allowlist/asignación de `save_quotation_edit`, preservando ACL, invoker/definer, locks, revisión y guards vigentes. Regresión `supabase/tests/miami_quotation_rate_destination.sql`.
+- Validaciones: suite completa final 669/669, regresiones de selección, duplicación, PDF, perfil, errores/reintento y respuestas tardías; PDF final verificado con la leyenda Tegucigalpa. TypeScript, build/postbuild OCR y lint:ci aprobados (612 archivos, 213 diagnósticos existentes, 0 regresiones); diff --check limpio. Ensayo SQL en réplica local `supabase_db_sarierp_gerencia20261104`, fixtures ficticios y ROLLBACK: creación LCL/Aéreo TGU, cambio SPS, edición ajena conserva destino, valor inválido rechazado, estado obsoleto PT409, preferencia SPS intacta, edición de TGU conserva SPS, creación interna privada y edición security invoker. Ninguna escritura en Production.
+- Navegador Chrome con sección y hook reales y perfil real, DB/sesión ficticias: cálculo cambia SPS/TGU en ambos productos, ruta conservada; confirmación de cambios sin guardar y payload RPC TGU; 1280/768/390 px sin overflow, selector alto 40 px. Evidencia local `.ua/intermediate/miami-destination-20261117/` y logs SQL/primera suite en `.ua/intermediate/purchasing-20261116/miami-destination-*`.
+- Pendiente: aplicar exclusivamente esta migración al publicar, preflight del release aislado, despliegue y UAT autenticada. No se consultaron/modificaron tarifas reales de CBM: sus tarifas TGU deben configurarse con los valores comerciales autorizados. Venex fuera de alcance.
+- Commit: pendiente.
+
+### 17/11/2026 - UX-CLIENT-RATE-ZERO-01 - Borrar cero en tarifas del cliente
+
+- Estado: implementado y validado localmente; publicación y UAT autenticada pendientes.
+- Causa: fletes y Otros cargos del perfil usaban input numérico nativo mientras `updateClientRateAmount` convertía vacío a cero, reponiendo el cero al escribir.
+- Cambio: ambos bloques usan el `NumberInput` compartido, que conserva el texto durante la edición y normaliza al perder foco. Mantiene clases/ancho compacto de 80 px, precisión step 0.01, permisos y RPC de guardado. La key incluye destino y código para no trasladar un borrador de texto entre SPS/TGU. Etiquetas accesibles identifican cada tarifa. Sin cambios al componente compartido, cálculos o SQL.
+- Archivo: `src/app/(protected)/clientes/[id]/page.tsx`.
+- Validación: TypeScript aprobado; 16/16 pruebas existentes de NumberInput, acceso/historial de tarifas y selección Miami aprobadas. Chrome con perfil real y DB/sesión ficticias: borrar cero con teclado, capturar 25.50, normalizar a 25.5 al salir y guardar ambos importes mediante `replace_client_rates` en SPS; ambos campos conservan 80 px, sin errores JavaScript. Evidencia `.ua/intermediate/miami-destination-20261117/rate-zero-browser-report.json`. Lint:ci sin regresiones (213 diagnósticos existentes), build/postbuild OCR y diff --check aprobados.
+- Pendiente: publicación y UAT autenticada. No se modificaron tarifas reales. Commit pendiente; Venex fuera de alcance.
+
+### 18/11/2026 - HR-01 - Recursos Humanos fase 1: empleados, vacaciones y permisos
+
+- Estado: implementado localmente, sin commit ni despliegue. SQL NO aplicado ni ejecutado: Docker/replica local no disponible en esta sesion. No marcar como completado hasta correr la suite SQL/RLS, aplicar la migracion y hacer UAT autenticada.
+- Alcance decidido con el usuario: ficha de empleados y vacaciones/permisos; autoservicio (cada empleado ve su ficha y solicitudes); vinculo opcional con usuario del ERP. Fuera de alcance: documentos, nomina, feriados, cambio de datos por el propio empleado.
+- Acceso: Admin aprobado y activo administra (`hr_is_manager`); no se crea rol nuevo. Cualquier usuario interno aprobado y activo ve solo la ficha con `profile_id = auth.uid()` y sus solicitudes. Cliente, inactivos, pendientes y otros tenants no ven nada. Tablas solo con SELECT por RLS; escrituras exclusivamente por RPC security definer.
+- Reglas: codigo unico por tenant (sin distinguir mayusculas), un usuario por ficha, jefe directo sin ciclos, revision optimista, baja exige fecha de salida. Solicitudes idempotentes por request_id, dias habiles lunes-viernes, sin traslapes Pendiente/Aprobada, mismo año calendario, empleado activo, lock por empleado. Vacaciones pendientes reservan saldo; la aprobacion revalida saldo. Rechazo exige motivo. El empleado cancela solo pendientes propias; Admin cancela pendientes o aprobadas. El saldo es `vacation_days_per_year` por año calendario (default 10, editable segun antiguedad/politica); no hay arrastre entre años.
+- SQL: nueva migracion `supabase/migrations/20261118120000_hr_employees_and_leave.sql` (hr_employees, hr_leave_requests, hr_is_manager, hr_is_internal_user, hr_business_days, hr_save_employee, hr_vacation_committed, hr_request_leave, hr_review_leave, hr_employee_manager_name). Suite `supabase/tests/hr_employees_and_leave.sql` registrada en `scripts/validate-audit-sql.mjs`.
+- Archivos: `src/lib/hr.ts`, `src/components/hr/{HrShared,EmployeesPage,LeaveRequestsPage,MyHrPage}.tsx`, rutas `src/app/(protected)/rrhh/{page,solicitudes/page,mi-ficha/page}.tsx`, `src/lib/permissions.ts`, `src/lib/sidebar-navigation.ts`, `src/components/layout/sidebar.tsx`, `src/lib/workspace-breadcrumbs.ts`, `tests/hr.test.mjs`, `tests/quotation-navigation.test.mjs` (7 grupos de menu) y este registro. Sin dependencias nuevas.
+- Validaciones: `npx tsc --noEmit` OK; ESLint enfocado OK; `npm run check:finance-ui` OK; suite completa 675/675 (6 nuevas de RRHH y conteo de grupos actualizado); `npm run build` OK con 120 paginas, incluidas /rrhh, /rrhh/solicitudes y /rrhh/mi-ficha. Sin prueba en navegador ni SQL ejecutado.
+- Pendientes: ejecutar `node scripts/validate-audit-sql.mjs --isolated` con la suite nueva; aplicar migracion en Trial y luego Production; UAT con Admin y con usuario Ventas vinculado (crear ficha, vincular, solicitar, aprobar/rechazar, cancelar, saldo); revision en navegador a 1280/768/390 px. Hash: 2de3c72 (rama feat/hr-module, sin push).
+- Revision 18/11/2026 (3 hallazgos, corregidos sobre la misma migracion porque aun no se aplico en ningun entorno):
+  - P1: `hr_request_leave`, cancelacion en `hr_review_leave` y `hr_employee_manager_name` evaluaban `e.profile_id=auth.uid()` como NULL en fichas sin usuario; un usuario interno con el UUID podia solicitar/cancelar por ese empleado. Ahora `coalesce(...,false)`. Regresion SQL agregada (usuario sin ficha contra ficha sin usuario).
+  - P2: el dialogo usaba el saldo del año en curso; ahora recibe `availableFor(year)` y calcula con el año de la fecha de inicio. Test unitario de saldo 2026 agotado / 2027 disponible.
+  - P2: idempotencia de `hr_request_leave` comprobaba `request_id` antes del lock. Ahora toma un advisory lock por `request_id` antes de comprobar; un reintento concurrente espera y devuelve el mismo ID. La concurrencia real no se cubre en la suite SQL de una sola sesion; queda para prueba manual con dos conexiones.
+  - Validaciones: tsc OK, ESLint OK, suite 676/676. SQL sigue sin ejecutar (sin Docker).
+- Validacion SQL 18/11/2026 (replica Docker `supabase_db_sarierp_gerencia20261104`, en migracion 20261105120000; `supabase_db_sarierp_aud01` de `--isolated` no estaba disponible, se siguio el procedimiento de entradas previas):
+  - Migracion + `supabase/tests/hr_employees_and_leave.sql` en una sola transaccion con ROLLBACK: todas las aserciones aprobadas (exit 0 con ON_ERROR_STOP). Despues: sin tablas/funciones `hr_*`, tenants ni usuarios de fixture en la replica.
+  - Mutante P1 (comparacion sin coalesce): la suite falla en "no solicita por otro empleado". Confirma que la regresion detecta el defecto.
+  - Concurrencia P2 con dos sesiones reales en base desechable `hr_conc` (esquema public/auth clonado de la replica, migracion confirmada, grants amplios solo para la prueba): con la correccion, B espera ~4 s el commit de A y devuelve el mismo ID; una sola fila. Sin el lock por request_id se reproduce el defecto ("Ya existe una solicitud en esas fechas"). `hr_conc` eliminada al terminar.
+  - Pendiente: aplicar en Trial/Production, UAT autenticada y revision en navegador. La prueba no cubre PostgREST/grants reales de Supabase, solo SQL.
+
+### 18/11/2026 - HR-02 - Vacaciones por aniversario, saldos historicos, ajustes y calendario laboral
+
+- Estado: implementado localmente en `feat/hr-module`, sin commit ni despliegue. Migracion no aplicada en Trial/Production. Pendiente fase de validacion acordada (SQL/RLS a fondo con mutantes, concurrencia, UAT, responsive) antes de Production.
+- Reglas: `docs/hr-vacation-policy.md` (decisiones del usuario sobre Codigo del Trabajo, Decreto 189-59; confirmar con asesoria laboral). Periodo por aniversario con escala 10/12/15/20 (Art. 346) y minimo por empleado solo al alza; jornada por empleado (L-V, L-S, L-S medio; sabado laborable = 1 dia); feriados por empresa y fecha; consumo del periodo mas antiguo; anticipo con tope por empresa (0-30, default 0); acumulacion Art. 350 una vez, hasta 2 periodos, irreversible; alertas Art. 348 (3 meses sin programar) y periodo vencido con saldo (sin borrar dias); fraccion marcada (Art. 346/351); suspension Art. 351 devuelve dias al periodo; saldos historicos como Apertura por periodo; ajustes inmutables con motivo.
+- SQL: nueva migracion `supabase/migrations/20261119120000_hr_vacation_periods.sql`. Cambia esquema de HR-01 (no aplicado en ningun entorno): elimina `vacation_days_per_year`, `hr_vacation_committed`, `hr_business_days` y la restriccion de año calendario; agrega jornada, minimo, marcas y suspension. Tablas nuevas hr_settings, hr_holidays, hr_leave_allocations, hr_vacation_ledger, hr_vacation_accumulations (RLS solo SELECT; escrituras por RPC). Reemplaza hr_save_employee (bloquea cambio de ingreso con movimientos y valida saldos al bajar el minimo), hr_request_leave, hr_review_leave (aprobacion revalida y reasigna). Nuevas: hr_preview_leave, hr_suspend_leave, hr_add_vacation_adjustment (idempotente), hr_authorize_accumulation, hr_save_settings, hr_save_holiday, hr_delete_holiday, hr_vacation_periods, hr_vacation_summary. Locks: request_id/ajuste antes de comprobar idempotencia; luego lock por empleado para toda mutacion de saldo.
+- Archivos: `src/lib/hr.ts` (tipos, escala, Pascua y sugerencias Art. 339, totales; sin calculo de saldo en cliente), `src/components/hr/{HrShared,EmployeesPage,LeaveRequestsPage,MyHrPage,VacationDetailDialog,HrSettingsPage}.tsx`, ruta `src/app/(protected)/rrhh/configuracion/page.tsx`, sidebar, breadcrumbs, `tests/hr.test.mjs`, `supabase/tests/hr_employees_and_leave.sql` (adaptada: ya no aplica año calendario; dias laborables), `supabase/tests/hr_vacation_periods.sql` (nueva, fechas relativas a current_date), `scripts/validate-audit-sql.mjs`, `docs/hr-vacation-policy.md`. Sin dependencias nuevas.
+- Validaciones: ambas suites SQL aprobadas (psql exit 0) aplicando las dos migraciones HR dentro de una transaccion con ROLLBACK en la replica `supabase_db_sarierp_gerencia20261104`; la suite detecto y se corrigio una ambiguedad de variable `days` en hr_suspend_leave. tsc OK; ESLint enfocado OK; check:finance-ui OK; suite 682/682; build OK con /rrhh/configuracion.
+- Riesgos/pendientes: concurrencia y mutantes de HR-02 aun no ejecutados; sin navegador ni UAT. Cambiar feriados o jornada no recalcula solicitudes existentes (decision documentada). Bajar el tope de anticipo no invalida anticipos ya registrados. hr_vacation_summary recorre periodos por empleado (aceptable para plantillas pequeñas; revisar si crece). Constancia firmada (Art. 355), avisos y calendario de ausencias quedan para bloques siguientes. Hash: pendiente.
+- Revision HR-02 18/11/2026 (3 hallazgos, corregidos en la misma migracion 20261119120000 porque no esta aplicada ni incluida en un commit):
+  - P1 suspension: recalculaba con jornada/feriados actuales (6 dias aprobados -> 7 tras borrar feriados, asignaciones en 6). Ahora `hr_leave_requests.counted_dates` guarda las fechas descontadas al registrar; la suspension conserva solo las anteriores al reintegro. Nueva `hr_working_dates`.
+  - P1 minimo retroactivo: `vacation_days_override` actual se aplicaba a todos los periodos. Nueva tabla `hr_vacation_minimums` con vigencia (al crear: desde el ingreso; al cambiar: desde hoy); cada periodo usa el minimo vigente el dia en que se gano. Cambios retroactivos via ajuste auditado. La suite tenia la expectativa incorrecta y se corrigio.
+  - P2 tope de anticipo: guardar la ficha revalidaba anticipos previos contra el tope actual. Eliminada `hr_assert_balances`; la ficha ya no revalida saldos y el ajuste valida solo su periodo (negativo si esta ganado; tope solo cuando resta dias de un periodo no ganado).
+  - Validacion: ambas suites SQL psql exit 0 con ROLLBACK en la replica; regresiones nuevas para los tres casos. Mutantes que reintroducen cada defecto: los tres detectados (M1 "suspension no recuenta el feriado eliminado", M2 "minimo no modifica periodos ganados", M3 error al editar ficha con anticipo previo). Replica sin tablas hr_* despues. tsc, ESLint enfocado y 7/7 unitarias OK.
+- Correccion adicional 18/11/2026 (pedido del usuario antes del commit): aprobar una solicitud con anticipo registrado antes de bajar el tope fallaba porque la aprobacion reasignaba contra el tope vigente. `hr_allocate_vacation` recibe `p_reserved` (anticipo que la solicitud ya tenia); la aprobacion permite `greatest(tope - anticipo de otras, reserva propia)`: conserva la reserva aunque supere el tope y nunca la amplia. Regresion SQL: tope 5 -> 0, aprobacion conserva 15 del periodo 4 + 3 de anticipo; con el periodo 4 reducido (fixture directo) la aprobacion exigiria 4 y se rechaza. Mutante M4 (sin reserva) detectado. Ambas suites psql exit 0 con ROLLBACK.
+
+- Validacion post-commit 01aebe0 (18/11/2026):
+  - Concurrencia HR-02 con dos sesiones reales en base desechable `hr_conc` (esquema clonado de la replica, ambas migraciones confirmadas, grants amplios solo para la prueba; eliminada al terminar). Con periodos 1-3 cerrados por apertura y 20 dias en el periodo 4: C1 dos solicitudes simultaneas de 15 y 10 dias -> B espera y se rechaza por saldo, periodo queda en 5; C2 traslape simultaneo -> una sola; C3 ajuste -5 contra solicitud de 5 con 5 disponibles -> solo una, periodo en 0; C4 mismo request_id de ajuste -> mismo ID y una fila; C5 doble acumulacion Art. 350 -> una. Mutante sin lock por empleado en hr_request_leave: C1 deja el periodo en -5 (defecto reproducido), confirmando que el lock es la proteccion.
+  - Trial: omitido por decision del usuario. `demo` esta 106 commits detras de main; no se hizo push ni SQL remoto.
+  - UAT/responsive en fixture sintetico `.ua/intermediate/hr-fixture` (componentes reales, sesion y Supabase simulados, sin datos reales) con Chrome headless aislado: 17 comprobaciones aprobadas sin errores JavaScript (`.ua/intermediate/hr-browser.mjs`, evidencia y capturas 1280/768/390 en `.ua/intermediate/hr-evidence/`). Cubre Admin (ficha con minimo legal y jornada, apertura en negativo, acumulacion con confirmacion, solicitud con vista previa de periodos/fraccion/anticipo, bandeja con marcas y suspension, calendario con 11 sugerencias Art. 339 y tope) y Ventas (Mi ficha sin menu Admin, cancelar pendiente).
+  - Defectos encontrados y corregidos: (1) UX-HR-FOCUS: los cinco dialogos de RRHH no devolvian el foco al cerrar (se montan sin DialogTrigger y Radix enviaba el foco a body); nuevo `useReturnFocus` en HrShared con `onCloseAutoFocus`, verificado para boton de cabecera y de fila. (2) UX-HR-DIALOG-WIDTH: a 390 px el contenido del dialogo de vacaciones desbordaba el dialogo porque la grilla de DialogContent crecia con la tabla; `grid-cols-1` en los dialogos de RRHH. El chequeo automatico ahora exige `scrollWidth<=clientWidth` del dialogo y se confirmo que falla con la version anterior. Texto de Empleados actualizado (vacaciones por aniversario).
+  - Artefactos de prueba descartados: hidratacion React #418 causada por inyeccion del antivirus (bloqueada como en harness previos) y por el stub de sesion del fixture; no son defectos del ERP.
+  - Validaciones finales: tsc OK, ESLint enfocado OK, check:finance-ui OK, 682/682, build OK. Pendiente: UAT autenticada real (sesion Supabase, RLS via PostgREST) y Trial cuando el usuario lo decida; Production fuera de alcance. Correcciones de UI sin commit.
+
+### 20/11/2026 - HR-03 - Plan de continuacion y preparacion de UAT autenticada
+
+- Estado: fase 1 en curso; no certificada para Production.
+- Archivos: `docs/hr-continuation-plan.md` y `docs/uat/hr-authenticated.md`. Sin cambios SQL ni nuevas dependencias en esta continuacion.
+- Plan: cierre tecnico HR-01/02; preparacion operativa y despliegue; calendario/avisos/exportaciones/historial; documentos y constancias; nomina/liquidaciones previa definicion funcional.
+- Validaciones actuales: tsc OK; ESLint de componentes HR y src/lib/hr.ts OK; check:finance-ui OK; HR 7/7 y suite completa 682/682. Suite ejecutada sobre arbol compartido con cambios independientes de clientes; no constituye validacion de un commit aislado.
+- Build: `npm.cmd run build` aprobado, incluido postbuild del runtime PDF de OCR.
+- Riesgos/pendientes: Docker no disponible (daemon no encontrado); no se ejecutaron SQL, Auth ni PostgREST reales. UAT preparada con roles, aislamiento por empresa, saldos, concurrencia y responsive. Trial continua omitido por decision previa. Candidato debe reconciliarse con main y aislar los cambios ajenos antes de integrar. Sin commit, push, SQL remoto ni despliegue en esta continuacion.
+
+### 20/11/2026 - HR-03 - Ejecucion autenticada local tras habilitar Docker
+
+- Estado: validacion autenticada principal aprobada; checklist integral y candidato aislado pendientes. Sin certificacion de Production.
+- SQL: HR-01 + HR-02 y cada suite ejecutadas con ROLLBACK en `supabase_db_sarierp_gerencia20261104`, ambas aprobadas; cero tablas hr_* persistidas. Nueva base desechable `hr_uat_20261120`: solo esquema public/auth/extensions, metadatos tecnicos de migraciones Auth y fixtures sinteticos; sin copiar filas de negocio ni documentos. Migraciones HR aplicadas solo alli, con sus grants explicitos intactos. Se excluyeron ALTER DEFAULT PRIVILEGES de infraestructura y se restauro propietario de Auth a supabase_auth_admin para iniciar el servicio; no equivale a esquema remoto.
+- Auth/PostgREST reales: 40 comprobaciones aprobadas (7 roles/estados, aislamiento tenant, sustitucion UUID, escritura directa/anonima bloqueada, ficha, escala, apertura, solicitud idempotente, aprobacion, cancelacion, suspension tras editar feriado). Otras 6 aprobadas: reserva de anticipo con tope 5->0, bloqueo de ampliacion, solicitudes simultaneas sin sobregiro, request_id simultaneo, ajuste simultaneo y acumulacion unica.
+- Navegador: ERP completo con build de produccion local, proxy/layout protegido/UserProvider/cliente Supabase reales, 17 comprobaciones aprobadas sin excepciones JS. Incluye login Admin/empleado, solo ficha propia/menu autorizado, redireccion desde ruta Admin, solicitud/cancelacion desde UI, aprobacion Admin persistida y confirmada por API. Capturas 1280/768/390 para empleados, ficha, vacaciones, solicitudes, configuracion, autoservicio, solicitud nueva y aprobacion. Escape/foco de ficha aprobado. Revision visual de solicitud a 390 y empleados a 1280.
+- Ambiente: modo dev presento error de inicializacion de router; no se certifica dev ni se atribuye a HR. Prueba final aprobada con build production local. Los primeros intentos del runner se corrigieron para esperar hidratacion, omitir tutorial, enfocar el disparador y esperar el cierre animado; no se modifico codigo productivo.
+- Archivos: `docs/hr-continuation-plan.md`, `docs/uat/hr-authenticated.md`, `docs/uat/hr-authenticated-results-2026-11-20.json` (resultados sanitizados, limites y SHA256 de migraciones/componentes). Harness y capturas locales en `.ua/intermediate/hr-auth*`.
+- Pendientes: completar casillas no ejercitadas del checklist (incluidos errores de red, sesion obsoleta y matriz ampliada), aislar cambios HR de tarifas, reconciliar con main, commit candidato y validacion de release. Trial sigue omitido. No hubo push, SQL remoto ni despliegue. Hash del candidato: pendiente.
+- Cierre de ambiente UAT: contenedores sari-hr-uat-auth/rest y base hr_uat_20261120 retirados; verificado cero bases con ese nombre y cero tablas HR en la replica. Servidores del ERP/gateway detenidos, navegador aislado cerrado y archivos de credenciales temporales eliminados. Evidencia conservada. `npx tsc --noEmit` aprobado al finalizar; diff sin errores de whitespace. `.env.local` intacto; `.next` corresponde al build UAT local y requiere recompilacion con ambiente destino antes del release.
+
+### 20/11/2026 - HR-04 - Recuperacion de red, sesion obsoleta y candidato aislado
+
+- Estado: corregido y validado localmente; candidato de release preparado. SQL y despliegue remotos pendientes; no certifica Production. Trial sigue omitido por decision previa.
+- Hallazgo reproducido en navegador: si fallaba hr_preview_leave, el dialogo indicaba Reintenta pero no permitia recalcular las mismas fechas. `src/components/hr/HrShared.tsx` agrega Reintentar calculo solo para errores de transporte/RPC; limpia el error, recalcula sin editar fechas ni crear solicitudes y mantiene bloqueado el envio hasta una vista previa valida. Conserva el request_id de la solicitud.
+- Regresiones: `tests/hr-recovery.test.mjs` ejercita el hook real con respuestas controladas (logout, cambio de empresa, respuesta tardia, reintento de lectura y recarga mas reciente) y el dialogo real con error/reintento del preview sin modificar sus argumentos. `supabase/tests/hr_vacation_periods.sql` comprueba que cambiar jornada L-S medio a L-V no quite un sabado originalmente gozado al suspender; sin cambios en migraciones SQL.
+- Navegador real sobre ERP completo del candidato: 31 grupos aprobados (17 flujo/responsive, 5 recuperacion, 3 sesion con dos pestanas, 6 foco/suspension). La respuesta perdida tras commit se simulo reteniendo la respuesta real de PostgREST: existe una fila antes del reintento y la misma despues. Cambio de usuario/logout reales desde otra pestana, reteniendo respuesta del usuario anterior: sin reaparicion de datos viejos. Los cinco dialogos retornan foco; capturas 1280/768/390. Sin excepciones JavaScript; 401/403 esperados durante transiciones de sesion registrados aparte.
+- API: 65 grupos (40 base + 19 matriz ampliada + 6 anticipo/concurrencia). Cliente, inactivo, pendiente, empleado y usuario sin ficha: denegacion 42501 en las 8 RPC administrativas probadas. Tenant B no lee las 8 tablas de A ni muta sus fichas/saldos/solicitudes; ajustes, minimo historico, jornada y rechazo verificados. Concurrencia por PostgREST cubre sobregiro, traslapes, idempotencia y acumulacion unica.
+- Validaciones del worktree aislado: 683/683 Node; 16/16 HR/sesion enfocados; tsc; ESLint de HR y nueva prueba; check:finance-ui; build Next y postbuild OCR; diff --check. Ambas suites SQL del candidato con ROLLBACK aprobadas. Conciliados 35 periodos de 7 empleados sinteticos contra ledger, asignaciones y estados.
+- Candidato: rama `release/hr-module-20261120` desde origin/main 2241df743bf8a9f502508121b675703b7730d3ec; HR-01/02 trasladados como 6fdb161 y 751989f. Conflictos de HARDENING y runner resueltos conservando main y agregando solo HR; no se incorporo pricing_supplier_picker ni cambios locales de tarifas. Cambios de UI previos de foco/ancho incluidos. Commit de cierre: consultar historial de la rama.
+- Ambiente: el enlace global de node_modules del worktree causaba fallo del empaquetado OCR; se reemplazo solo en el entorno local por enlaces individuales y copias fisicas de pdfjs/canvas ya instalados. Sin versiones ni codigo productivo de OCR modificados; build/postbuild final aprobados. Advertencia Next por multiples lockfiles del worktree, sin fallo final. `.next` candidato apunta a UAT local y debe recompilarse con ambiente destino para release.
+- Archivos de cierre: componentes HR citados, nueva prueba de recuperacion y regresion SQL; `docs/hr-continuation-plan.md`, `docs/uat/hr-authenticated.md`, evidencia inicial y `docs/uat/hr-release-validation-2026-11-20.json` con hashes normalizados LF. Sin nuevas dependencias.
+- Limpieza: base y contenedores UAT eliminados, servidores y Chrome aislado detenidos, credenciales temporales borradas; replica verificada sin tablas HR. No hubo push, SQL remoto ni despliegue. Pendiente fase 2: respaldo, inventario remoto de migraciones, configuracion/carga inicial revisada, aprobacion del release concreto e integracion/despliegue.
+### 23/11/2026 - HR-10 - Cálculo automático de vacaciones y liquidaciones
+
+- Estado: implementado y validado localmente. **Pendientes aplicación SQL, despliegue y conciliación de un caso real autorizado en Producción**; no se marca activación operativa completa. Commit pendiente en `feat/hr-benefit-calculations-20261123`, candidato aislado sobre `be4bfdc47d090ff8c8c5ba8f12d77bb122095085`. No se incorporaron cambios del árbol raíz ni se alteraron salarios reales.
+- SQL nuevo: `supabase/migrations/20261123120000_hr_automatic_benefits.sql`. Preparación exclusiva mediante `scripts/prepare-hr-benefit-release.mjs`, guardias de ambiente/tenant/historial/hash de HR-08 y verificación de RLS/permisos, registrada en `docs/hr-release-runbook.md`. Motor servidor versionado, historial exacto con días efectivos, integración de décimos, vacaciones aprobadas y saldo/proporción al terminar, preaviso, cesantía general/micro y supuestos 120g, proporcionales 13/14, plazo fijo comprobado con límite. No extrapola variables ni decide regímenes especiales/protecciones. Causal, tamaño real, exclusiones y política favorable requieren revisión documentada.
+- Integridad: créditos externos auditados por componente/período/moneda, sin compensar excesos contra otros derechos. Anulación conserva historial y bloquea créditos aplicados a nómina vigente. Borrador y cálculo se guardan en una transacción idempotente. Recalcula y compara huella al crear/aprobar/contabilizar; un cambio devuelve también el asiento de la transacción. Bloquea segunda liquidación activa. Usa el orden de locks del ledger antes de bloquear empleado para evitar inversión con cambios de ficha. Consolida conceptos contables compartidos sin perder fórmulas. No transfiere fondos, termina fichas ni aplica retenciones automáticamente.
+- Archivos: `src/lib/hr-benefits.ts`, `src/components/hr/HrBenefitsPage.tsx`, ruta `src/app/(protected)/rrhh/calculos/page.tsx`, navegación HR/sidebar/breadcrumbs, `HrPayrollPage.tsx`, `hr-payroll.ts`, `src/components/pdf/hr-benefit-pdf.tsx`, `src/app/api/hr/benefits/[id]/route.ts`. Detalle PDF privado con bases, períodos de vacaciones, créditos, versión y huella; empleado solo consulta cálculo propio aprobado/contabilizado desde su comprobante. RLS, validación de sesión/empresa y `private, no-store` aplicados. Formularios conservan evidencia ante errores y el mismo UUID ante respuesta perdida; cambio de contexto conserva el desmontaje HR-09.
+- Documentación: `docs/hr-benefit-calculation-policy.md` con fórmulas, convenciones de 360 días/aniversarios, límites compartidos y fuentes primarias TSC/SETRASS; actualización de `docs/hr-payroll-policy.md`. No se usó el antiguo tope general de la guía histórica en lugar del Código actualizado. El reglamento escaneado del 14.º se revisó en sus cuatro páginas.
+- Pruebas: `tests/hr-benefits.test.mjs`, `supabase/tests/hr_automatic_benefits.sql`; registradas en `scripts/validate-audit-sql.mjs` y la pantalla en `scripts/check-finance-ui.mjs`. TSC, ESLint enfocado, estándar financiero, suite completa **693/693**, build Next 16 y postbuild OCR aprobados. Ocho suites SQL (beneficios, nómina, períodos, empleados/ausencias, calendario, documentos, correo y compras) aprobadas con rollback en réplica local. Se probó cálculo, integración, renuncia/micro/fallecimiento/exclusión, topes 25/15, política proporcional, moneda distinta, plazo restante y salario futuro, idempotencia, privacidad, créditos/excesos, bloqueo por cambio antes de aprobar y antes de contabilizar, aprobación/asiento/reversión, vacaciones canceladas y ausencia de asiento parcial.
+- UAT adicional: base desechable solo esquema + fixtures sintéticos, Supabase Auth/PostgREST reales. Seis perfiles ficticios; denegación a empleado/otra empresa/cliente/inactivo/pendiente; dos solicitudes concurrentes producen un borrador, dos contabilizaciones producen un asiento; comprobante propio enlaza su cálculo aprobado. ERP completo en build local: login real, captura mensual/cálculo servidor, respuesta de guardado perdida y reintento sin duplicación, PDF real 200/no-store, empleado obtiene solo propio aprobado, cálculo revertido devuelve 404 y ruta de administración redirige. Pantalla y resultado comprobados sin overflow a 1280/768/390, sin excepciones JS; revisión visual móvil y PDF. PDF final: tres páginas, bases/períodos/huella extraídos y primera página renderizada/revisada. Evidencia sanitizada en `docs/uat/hr-benefit-validation-2026-11-23.json`; harness/capturas/PDF sintéticos locales en `.ua/intermediate/hr-benefit-*`.
+- Límites: no certifica nómina legal de regímenes excluidos ni configuración real de Sari. Activación requiere salarios/vigencias, conceptos/cuentas, historial devengado y días efectivos, saldos y pagos previos conciliados; no equivale a dispersión bancaria. `.env.local` intacto; `.next` es exclusivamente UAT local y debe recompilarse con el ambiente destino antes del despliegue. Trial no ejecutado. Hash de commit: pendiente.
+
+### 24/11/2026 - UX-COST-VALIDATION-01 - Rediseño visual de Validación de Costos
+
+- Estado: publicado en Production el 24/11/2026 (PR #3, fast-forward de `main` a `c4bc63d`; despliegue Vercel Production exitoso). UAT autenticada con datos reales pendiente.
+- Causa: el módulo no usaba la cabecera ni las métricas de Finanzas, el badge de estado financiero era siempre ámbar (Validado se veía igual que Pendiente), la conciliación y la variación eran texto plano, todas las acciones (incluida Eliminar) compartían el mismo botón gris, el listado no tenía modo oscuro, filtros ni paginación, y el detalle no tenía skeleton de carga. Revisión guiada por reglas de accesibilidad, jerarquía y color semántico (UI/UX Pro Max) y por `references/ui-conventions.md`.
+- Cambio: listado con `FinancePageHeader`, cuatro `FinanceMetric` (pendientes, listas para revisar con el mismo criterio `operationsAreComplete`, validadas y total), pestañas con conteo (Pendientes por defecto), búsqueda por RT/booking/cotización/cliente/carrier, `Pagination` de 25, badges por estado real y filas con `Link`. Detalle con cabecera y badges de estado, ruta de validación en cuatro pasos con progreso, tarjetas de base de comparación y operaciones, formulario con `FormField`/`FormSection` en tres grupos, tabla de facturas con importes alineados, vínculo/sin conciliar visible, eliminación como acción destructiva con nombre accesible, y revisión final coloreada según su estado con una sola acción principal. `CostAnalysisPanel` (también en la pestaña Tarifas de la cotización) usa métricas con tono por signo, aviso y badge según estado, conciliación como badge, variación con flecha y texto para lectores de pantalla, y `formatMoney`. `FinanceMetric` suma tonos `sky` y `red`. Nuevo `src/components/pricing/CostStatus.tsx` (badge, aviso, progreso y tonos). Las regiones de tabla con scroll son `relative` para que el texto `sr-only` no provoque desborde horizontal.
+- Sin cambios a consultas de escritura, RPC, cálculos de `cost-analysis`, permisos ni SQL. La consulta del listado solo añade `closed_at` (lectura).
+- Archivos: `src/app/(protected)/cost-validation/page.tsx`, `src/app/(protected)/cost-validation/[id]/page.tsx`, `src/components/pricing/CostAnalysisPanel.tsx`, `src/components/pricing/CostStatus.tsx`, `src/components/invoicing/FinanceWorkspace.tsx`.
+- Validación: TypeScript aprobado; `check:finance-ui` aprobado; suite completa 697/697; lint:ci sin regresiones (212 diagnósticos existentes; el listado baja de 5 a 2 errores heredados). Chrome headless con sesión y Supabase sustituidos por fixture: 12 comprobaciones (KPIs y conteos, filtros, paginación, búsqueda con estado vacío, enlaces, campos numéricos 112/160 px, validación deshabilitada/habilitada/validada, panel de cotización sin datos de facturas) a 1280, 768 y 390 px y en modo oscuro, sin desborde ni excepciones JavaScript. Harness y capturas locales en `.ua/intermediate/cost-validation-ui-*` y `check-cost-validation-ui-browser.mjs`.
+- Production: smoke anónimo en `https://forwarders.app`: `/` y `/login` 200; `/cost-validation` responde 404 sin sesión, igual que `/invoicing`, `/financial-dashboard` y `/quotations` (comportamiento existente de rutas protegidas). Sin SQL ni migraciones. No se navegó con sesión real ni se modificaron datos.
+- Pendiente: UAT autenticada con datos reales (Admin/Finanzas/Contabilidad) en listado, detalle y pestaña Tarifas de la cotización. El listado sigue leyendo en una sola consulta (límite de filas de la API heredado); si el volumen crece conviene paginar en servidor. El estado de filtros no se conserva en la URL. Hash de commit: `4b55fe2`.
+
+### 24/11/2026 - UX-OPS-01 - Operaciones: estado unificado, guardado único y lenguaje operativo (bloque 1)
+
+- Estado: publicado en Production el 24/11/2026 (PR #4, fast-forward de `main` a `e54c14c` junto con UX-OPS-02; despliegue Vercel Production exitoso). Smoke anónimo en `https://forwarders.app`: `/` y `/login` 200; `/operations/dashboard` y `/operations/shipping-instructions` 404 sin sesión, igual que `/invoicing` (comportamiento existente de rutas protegidas). Sin SQL ni migraciones. UAT autenticada con datos reales pendiente.
+- Causa: en la Shipping Instruction el estado aparecía en cuatro lugares (estado operativo, estado embarque, shipment "canónico" y agregado de bookings), se mostraba el identificador interno del shipment y había cuatro acciones con el mismo peso al pie de la página. En el Booking competían dos acciones principales (transición del encabezado y "siguiente acción sugerida"), existían dos botones de guardado independientes (Guardar Booking y Guardar contenedores) sin aviso de cambios sin guardar, las fechas eran campos `date` de solo lectura, había etiquetas en inglés o sin tilde y se mostraba el bucket de Supabase Storage. Además, validar, aceptar, asignar o cambiar de estado con cambios locales sin guardar operaba sobre la fila guardada y podía perder lo editado. La SI conservaba una sección Shipper/Consignee/Notify oculta con `hidden` desde la creación del módulo de BL (esos datos se capturan en el BL).
+- Cambio: nuevo `src/components/operations/OperationsWorkspace.tsx` (badge de estado con color, icono y texto; ruta de pasos con paso actual anunciado; título de sección; barra fija de guardado con estado de cambios; clases de acción principal, secundaria y destructiva). SI con `FinancePageHeader` (eyebrow Operaciones), un solo estado visible, ruta de siete pasos, responsable/envío/aceptación en la misma tarjeta, datos de cotización y referencia operativa unificados (sin duplicar días libres), observaciones internas y para PDF separadas por color y texto, tabla de bookings con badges y enlaces con nombre accesible, y barra inferior con una sola acción principal según la etapa (Enviar, Aceptar, Validar, Abrir/Crear booking o Finalizar). Booking con encabezado y estado, transición como única acción principal en la barra inferior, "Guardar cambios" único para datos y contenedores, fechas DD/MM/YYYY, etiquetas en español, sugerencia del expediente documental como acción secundaria, botones de formulario secundarios, y readiness con estados y modalidad en español sin códigos internos. Ambas pantallas usan `UnsavedChangesGuard`; las acciones de servidor guardan primero lo editado y se ejecutan con la versión devuelta (`updated_at`), y la navegación a BL pasa por el aviso de cambios sin guardar. Se elimina la sección oculta de la SI; el payload de guardado no cambia.
+- Sin cambios a SQL, RPC, permisos, estados ni PDF.
+- Archivos: `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`, `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`, `src/components/operations/OperationsWorkspace.tsx`, `src/components/operations/DocumentationWorkspace.tsx`, `src/components/operations/BookingReadinessPanel.tsx`, `src/components/operations/BookingScheduleManager.tsx`, `src/components/operations/BookingTimeline.tsx`.
+- Validación: TypeScript aprobado; `check:finance-ui` aprobado; suite completa 697/697; lint:ci sin regresiones (212 diagnósticos existentes). Chrome headless con sesión y Supabase sustituidos por fixture: 8 comprobaciones (paso actual y acción principal única en SI, guardar antes de aceptar sin conflicto de versión, booking con fechas DD/MM/YYYY y una sola acción principal, guardado único de datos y contenedores, transición que guarda antes y usa la versión vigente) a 1280, 768 y 390 px y en modo oscuro, sin desborde ni excepciones JavaScript. Harness y capturas locales en `.ua/intermediate/operations-ux-*` y `check-operations-ux-browser.mjs`.
+- Pendiente: UAT autenticada (Ventas, Operaciones, Admin) sobre SI y Booking reales. Las recargas que disparan el itinerario y el readiness (`loadData`) siguen reemplazando ediciones locales no guardadas, como antes. `secondaryButtonClass` compartido no tiene variante oscura (botones del itinerario). Las páginas de BL, el Control Tower y los listados quedan para el siguiente bloque. Hash de commit: `554ccc7`.
+
+### 24/11/2026 - UX-OPS-02 - Operaciones: BL en panel lateral, vista rápida del Control Tower y diálogos unificados (bloque 2)
+
+- Estado: publicado en Production el 24/11/2026 (PR #5, fast-forward de `main` a `e54c14c`; despliegue Vercel Production exitoso). Smoke anónimo en `https://forwarders.app`: `/` y `/login` 200; `/operations/dashboard` y `/operations/shipping-instructions` 404 sin sesión, igual que `/invoicing` (comportamiento existente de rutas protegidas). Sin SQL ni migraciones. UAT autenticada con datos reales pendiente.
+- Causa: crear o editar un MBL/HBL obligaba a salir del Booking a otra página y volver, repetido por cada documento; el operativo perdía el contexto (contenedores, fechas, shipper) y el Booking no reflejaba el cambio hasta recargar.
+- Cambio: nuevo `src/components/ui/side-panel.tsx` (panel lateral sobre Radix Dialog, sin librerías nuevas): fondo desenfocado y oscurecido, panel sólido para conservar el contraste, cabecera con eyebrow y acciones, pantalla completa en móvil, animación desactivada con `prefers-reduced-motion`, y confirmación "Cambios sin guardar" al cerrar con X, Esc o clic fuera si se editó un campo (se limpia con `markFormSaved()`). La página del BL pasa a `src/components/operations/BillOfLadingEditor.tsx` (misma lógica; parámetros por props, modo `embedded` sin migas ni título propio, `onCreated`/`onChanged`/`onClose`); la ruta `/bl/[blId]` queda como envoltorio y sigue funcionando. En el Booking, Crear MBL, Crear HBL, Abrir y los enlaces de BL del expediente documental abren el editor en el panel; el BL abierto vive en la URL (`?bl=`, `blType`, `parentBlId`), Atrás lo cierra y el enlace directo lo abre; al crear, el panel pasa al BL creado; al guardar o cerrar se recargan la lista de BL y la versión del booking (`master_bl`, `house_bl`, `updated_at`) para que el siguiente guardado del Booking no choque con la sincronización de números de BL. "Abrir en página" conserva el acceso a la vista completa.
+- Vista rápida del Control Tower: nuevo `src/components/operations/OperationQuickView.tsx`. Las tarjetas "Siguientes 3 acciones" y el booking de cada fila de la cola abren un panel con prioridad, estado, antigüedad del último cambio, motivo y vencimiento, una sola acción principal (la siguiente acción, con el ancla exacta del Booking o la SI), accesos a Booking y SI, itinerario (ruta, naviera, buque/viaje, ETD/ETA reales o estimadas, días libres, contenedores), readiness (bloqueos, VGM, cut-offs) y documentos faltantes, adjuntos y estado de BL. Usa solo los datos ya cargados por el tablero (sin consultas nuevas). El booking abierto vive en la URL (`?preview=`), se conserva al cambiar filtros, Atrás lo cierra y el enlace directo lo abre. El enlace "siguiente acción" de la tabla sigue navegando directo. Se corrige además el desborde horizontal del tablero en móvil (paneles inferiores con `grid-cols-1` y `min-w-0`).
+- Diálogos: nuevo `src/components/operations/OperationDialog.tsx` (`OperationDialogContent`, misma API que `DialogContent`): fondo desenfocado, panel sólido, icono con tono semántico y eyebrow de contexto, título/descripción/pie con el mismo estilo y pie fijo al final del contenido. Se aplica a cambio de estado y eliminación de documento del Booking, cancelación de SI (ahora exige motivo para habilitar la confirmación), acciones de itinerario (con etiquetas en español), cut-off, acción de readiness y VGM, excepción documental del BL y el envío del draft de HBL (antes un modal hecho a mano con `fixed inset-0`, ahora diálogo accesible con foco atrapado y Esc). Botones: una sola acción principal (`operationPrimaryButtonClass`), secundarios uniformes y destructivas con el nuevo `operationDangerSolidButtonClass`. `DialogContent` acepta `overlayClassName` y su botón de cierre se anuncia como "Cerrar".
+- Sin cambios a SQL, RPC, permisos, estados ni PDF.
+- Archivos: `src/components/ui/side-panel.tsx`, `src/components/ui/dialog.tsx`, `src/components/operations/OperationDialog.tsx`, `src/components/operations/OperationsWorkspace.tsx`, `src/components/operations/BookingReadinessPanel.tsx`, `src/components/operations/BookingScheduleManager.tsx`, `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`, `src/components/operations/BillOfLadingEditor.tsx` (antes `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`), esa misma ruta como envoltorio, `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`, `src/components/operations/DocumentationWorkspace.tsx`, `src/components/operations/OperationQuickView.tsx`, `src/app/(protected)/operations/dashboard/page.tsx`.
+- Validación: TypeScript aprobado; `check:finance-ui` aprobado; suite completa 697/697; lint:ci sin regresiones (212 diagnósticos existentes). Chrome headless con fixture: 18 comprobaciones (las 8 del bloque 1, 2 de diálogos —cancelar SI, cut-off e itinerario con contenedor común, fondo con `backdrop-filter`, una sola acción principal y confirmación bloqueada sin motivo, también en oscuro—, 3 de la vista rápida —fila y tarjeta abren el panel con una sola acción principal, cierre y Atrás restauran la URL, `?preview=` directo, 390 px y modo oscuro— y 5 del panel de BL: abre sobre el Booking sin cambiar de ruta y con `?bl=`, fondo con `backdrop-filter`, aviso al cerrar con cambios y opción de seguir editando, cierre sin aviso tras guardar con URL restaurada, nuevo HBL en panel, enlace directo, ancho completo a 390 px y modo oscuro), sin excepciones JavaScript. La advertencia de React por `key` observada durante la prueba se reprodujo también con la página original de `main` y se debía a que el fixture no devolvía `id` en inserciones; corregido el fixture, no aparece.
+- Pendiente: UAT autenticada. El formulario de BL conserva su propio botón de guardado de contenedores. Con cambios sin guardar en el Booking, cerrar el panel no usa Atrás (para no disparar el aviso de salida) y deja una entrada duplicada en el historial. La vista rápida es de solo lectura (las acciones se ejecutan en el Booking o la SI). `ConfirmDialog` compartido (quitar contenedor) conserva su estilo general. Hash de commit: `149c0fc`.
+
+### 24/11/2026 - UX-OPS-03 - Operaciones: aceptar y validar en un paso, cierre único y días calculados (bloque 3)
+
+- Estado: publicado en Production el 24/11/2026 (PR #6, fast-forward de `main` a `2c8b14f`; despliegue Vercel Production exitoso). Smoke anónimo en `https://forwarders.app`: `/` y `/login` 200; `/operations/dashboard`, `/portal` e `/invoicing` 404 sin sesión (comportamiento existente de rutas protegidas). Sin SQL ni migraciones. UAT autenticada con datos reales pendiente.
+- Causa: el operativo debía aceptar y luego validar el expediente en dos acciones aunque los datos del proveedor ya estuvieran completos; cerrar la operación exigía finalizar cada booking y luego volver a la SI a "Finalizar operación" (botón que además se mostraba con bookings abiertos y siempre fallaba porque la RPC exige todos los bookings activos finalizados); "Días libres restantes" y "Días de tránsito reales" se escribían a mano, quedaban desactualizados y un valor vacío se interpretaba como 0 días en el Control Tower y en las alertas.
+- Cambio: en la SI, si proveedor, contacto, email y dirección están completos, el botón principal es "Aceptar y validar" y ejecuta en secuencia las RPC existentes `accept_shipping_instruction_handoff` y `validate_shipping_instruction` con la versión devuelta (si la validación falla, el expediente queda aceptado y se valida después); el chequeo de campos obligatorios se centraliza en `hasCompleteSupplier`. Se quita "Finalizar operación" mientras haya bookings activos sin finalizar y se explica que la operación se cierra con el último booking. En el Booking, al finalizar el último booking activo se llama a `finalize_shipping_instruction_canonical` (que vuelve a validar bookings y contenedores); si falla, se avisa y la SI conserva su botón de cierre. Nuevo `src/lib/booking-transit.ts`: `realTransitDays` (días calendario entre salida y arribo reales) y `effectiveRemainingFreeDays`/`lastFreeDay` con la regla confirmada por el usuario: el día de arribo real cuenta como día 1 (14 días y arribo el 02/01 → último día libre 15/01; 0 o negativo = demora). Con arribo real y días libres los campos del Booking son de solo lectura con etiqueta "Calculado" y último día libre; el valor calculado se guarda al guardar el Booking y se usa en el Aviso de llegada, el Control Tower (tabla de días libres, cola y vista rápida), las alertas (que ahora leen `free_days`) y el portal del cliente. Sin arribo real se conserva la captura manual; un valor vacío ya no se trata como 0 días.
+- Sin cambios a SQL, RPC, permisos, estados ni PDF (el Aviso de llegada recibe el valor calculado).
+- Archivos: `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`, `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`, `src/app/(protected)/operations/dashboard/page.tsx`, `src/lib/booking-transit.ts`, `src/lib/alerts.ts`, `src/app/portal/envios/[id]/page.tsx`, `tests/booking-transit.test.mjs`.
+- Validación: TypeScript aprobado; `check:finance-ui` aprobado; suite completa 701/701 (4 pruebas nuevas de tránsito y días libres); lint:ci sin regresiones (212 diagnósticos existentes). Chrome headless con fixture: 20 comprobaciones (las 18 anteriores, con "Aceptar y validar" ejecutando guardar → aceptar → validar sin conflicto de versión, más días libres/tránsito calculados en un booking arribado y cierre de la operación al finalizar su último booking), sin excepciones JavaScript.
+- Pendiente: UAT autenticada. El cierre automático depende de que el operativo finalice el booking desde el ERP (no hay disparador en base de datos). Los estados automáticos del booking, el VGM en tabla y la simplificación del HBL requieren confirmar con el equipo operativo qué pasos son obligatorios. Hash de commit: `a14db7f`.
+
+### 25/11/2026 - UX-OPS-04 - Operaciones: booking en 5 pasos, VGM en lote y HBL abreviado (bloque 4)
+
+- Estado: publicado en Production el 25/11/2026. Migración aplicada con paquete protegido (respaldo previo 45651045947; 192 migraciones, fuente registrada SHA-256 a1dedee0…; funciones, permisos y datos verificados) y después PR #7 por fast-forward de `main` a `1f1961a` con despliegue Vercel Production exitoso. Trial no sincronizado por decisión del usuario. Detalle: `docs/release/operations-simplified-flow-2026-11-25.md`. UAT autenticada con datos reales pendiente.
+- Decisión de negocio (confirmada por el usuario el 25/11/2026): flujo simplificado del booking en 5 acciones; VGM registrada y enviada en un paso desde una tabla; HBL Draft → Aprobado → Emitido con "Enviado al cliente" y "Liberado" como registros; diálogo de fecha/ubicación solo en eventos físicos.
+- Causa: el booking requería 10 transiciones manuales, cada una con diálogo; la VGM exigía borrador, verificar y enviar por contenedor; el HBL tenía 5 estados aunque el envío al cliente ya se registra aparte y la liberación no bloquea nada.
+- Cambio SQL (`supabase/migrations/20261125120000_operations_simplified_flow.sql`): nueva `advance_booking_flow(booking, versión, paso, fecha, ubicación, notas)` con pasos `confirm` (→ Solicitado → Confirmado), `ready` (→ Documentación Pendiente → Listo para Embarque), `departure` (→ Embarcado → En Tránsito con la misma fecha real), `arrival` y `deliver_finalize` (registra DELIVERED si falta y finaliza); llama a `transition_booking_status` en una transacción con la versión vigente, así que se conservan todas sus validaciones (campos, contenedores, documentos, readiness, fechas reales, entrega). Si el gate de readiness bloquea, devuelve el bloqueo y el paso intermedio queda como estado válido; cualquier excepción revierte todo. Nueva `submit_booking_vgm_batch(booking, filas, referencia)`: borrador, verificación (usuario y método de pesaje) y envío por fila con las funciones existentes; un error revierte el lote. `transition_bill_of_lading` acepta además `HBL Draft → Aprobado por Cliente` (copia íntegra de la función vigente con una línea adicional); los estados históricos `Pendiente Aprobación Cliente` y `Liberado` siguen siendo válidos. Permisos: `authenticated` y `service_role`, sin `anon`.
+- Cambio frontend: el Booking usa los 5 pasos; "Confirmar booking" y "Marcar listo para embarque" se ejecutan en un clic (si faltan requisitos se avisa y se lleva al readiness), "Registrar salida", "Registrar arribo" y "Registrar entrega y finalizar" piden fecha, ubicación y notas. Confirmar la referencia en el itinerario confirma el booking si ya cumple; si falta algo, se informa sin error. La VGM es una tabla editable con todos los contenedores y un botón "Enviar VGM (n)"; quedan "Aceptada por naviera", "Rechazada" y "Corregir". En el HBL el paso principal es "Registrar aprobación del cliente" y luego "Emitir HBL"; "Registrar liberación" queda como acción secundaria opcional. `getBlReadiness` exige MBL padre también al aprobar directo.
+- Archivos: migración y prueba SQL nuevas, `scripts/validate-audit-sql.mjs`, `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`, `src/components/operations/BookingReadinessPanel.tsx`, `src/components/operations/BookingScheduleManager.tsx`, `src/components/operations/BillOfLadingEditor.tsx`, `src/lib/bl-document-workflow.ts`, `tests/bl-document-workflow.test.mjs`.
+- Validación: instalación limpia de las 191 migraciones en el stack aislado `sarierp_aud01` (sin tocar la base de desarrollo); `supabase/tests/operations_simplified_flow.sql` aprobada (permisos de Ventas, versión obsoleta, paso fuera de orden, confirmar, bloqueo de readiness con estado intermedio, lote VGM con reversión total ante error, listo, salida con dos eventos y fecha real, arribo, aprobación directa y flujo histórico del HBL, entrega y cierre); suite SQL de CI completa 60/60 en el stack aislado. TypeScript, `check:finance-ui`, 702/702 pruebas y lint:ci sin regresiones. Chrome headless con fixture: 22 comprobaciones, incluidas la tabla de VGM con envío único, el paso administrativo en un clic sin diálogo y la salida en un paso con fecha y ubicación, sin excepciones JavaScript.
+- Pendiente: UAT autenticada (VGM real con naviera, flujo completo de un booking FCL y un HBL). `bill_of_lading_document_integrity.sql` y `bl_validation_exceptions.sql` (fuera de la lista de CI) fallan al preparar datos por el requisito de empresa en `clientes`, igual que antes del cambio. Hash de commit: `cfda9a8`.
+
+### 25/11/2026 - UX-OPS-05 - Operaciones: listados, Garantías, editor de BL y Control Tower con el diseño común (bloque 5)
+
+- Estado: publicado en Production el 25/11/2026 (PR #8, fast-forward de `main` a `c823fa4`; despliegue Vercel Production exitoso). Sin SQL. Smoke anónimo: `/` y `/login` 200; `/operations/shipping-instructions`, `/operations/bookings`, `/operations/garantias` y `/operations/dashboard` 404 sin sesión (rutas protegidas). UAT autenticada pendiente.
+- Causa: los listados de Shipping Instructions, Bookings y Garantías y el encabezado del Control Tower conservaban estilos propios (cabeceras oscuras, métricas sin icono o con colores no semánticos, azul como color de selección), filtros sin etiqueta visible en Bookings, `th` sin `scope`, "N/A" en celdas vacías y estados como texto con color. Garantías marcaba "recuperada" sin confirmación y abría su formulario en medio de la página. El editor de BL tenía un botón aparte para guardar contenedores y etiquetas de ruta en inglés (también en las diferencias documentales).
+- Cambio: `OperationsWorkspace` suma `OperationFilterMetric` (métrica que también filtra, con `aria-pressed`) y `operationTableHeadClass`. SI y Bookings usan `FinancePageHeader` (eyebrow Operaciones), métricas con icono y tono que aplican el filtro correspondiente, filtros con etiqueta y búsqueda con icono, tabla clara con `th scope`, enlace principal en la primera columna, `OperationStatusBadge`, "Sin asignar" resaltado y "—" en vacíos; Bookings agrega "Limpiar filtros". Garantías: encabezado y métricas comunes (incluido filtro "Por vencer ≤ 14 días"), chips de estado con conteo y `aria-pressed`, estado con color, icono y texto, "Marcar recuperada" con confirmación y "Nueva garantía" en panel lateral con aviso de cambios sin guardar. Editor de BL: un solo "Guardar" que también guarda los contenedores si cambiaron (se quita "Guardar contenedores") y etiquetas en español en formulario, requisitos y diferencias documentales. Control Tower: encabezado común con Actualizar, métricas con el componente común y filtros de la cola con color de marca y `aria-pressed`.
+- Archivos: `src/app/(protected)/operations/shipping-instructions/page.tsx`, `src/app/(protected)/operations/bookings/page.tsx`, `src/app/(protected)/operations/garantias/page.tsx`, `src/app/(protected)/operations/dashboard/page.tsx`, `src/components/operations/OperationsWorkspace.tsx`, `src/components/operations/BillOfLadingEditor.tsx`, `src/lib/bl-document-workflow.ts`.
+- Validación: TypeScript, `check:finance-ui`, suite completa 702/702 y lint:ci sin regresiones. Chrome headless con fixture: 28 comprobaciones (las 22 anteriores y 6 nuevas: métricas que filtran en SI y Bookings, limpiar filtros, Garantías con confirmación y panel, listados sin desborde a 390 px y en oscuro, editor de BL sin botón aparte ni etiquetas en inglés, Control Tower con filtros presionados), sin excepciones JavaScript.
+- Pendiente: UAT autenticada. El monto de Garantías sigue con el control numérico estándar del navegador (fuera del alcance de `check:finance-ui`). Hash de commit: `4beee43`.
+
+### 25/11/2026 - UX-SALES-01 - Ventas: accesibilidad básica en Cotizaciones, Mi día y estado de la cotización
+
+- Estado: publicado en Production el 25/11/2026 (PR #9, fast-forward de `main` a `8dc79e6`; despliegue Vercel Production exitoso). Smoke anónimo: `/` y `/login` 200; `/historico`, `/ventas` y `/clientes` 404 sin sesión (rutas protegidas). Sin SQL. Alcance reducido tras la revisión del análisis de Ventas: no toca cierre, SI, reglas comerciales ni el diseño general de métricas y encabezados.
+- Causa: en Cotizaciones (`/historico`) solo el clic en la fila abría el detalle (no había un enlace accesible con teclado) y los filtros de fecha no tenían etiqueta; en Mi día el selector Lista/Calendario no anunciaba la vista activa; el botón de estado de la cotización ya era un botón con `aria-expanded`, pero se leía como una etiqueta (problema de descubrimiento, no de semántica).
+- Corrección del análisis previo: el listado de Clientes sí se puede abrir con teclado mediante "Ver perfil", por lo que no se modificó.
+- Cambio: el número de cotización es un enlace que conserva los filtros en `returnTo` (la fila sigue respondiendo al clic); filtros "Desde" y "Hasta" con etiqueta visible y "Hasta" con mínimo igual a "Desde"; hover de filas en modo oscuro. Mi día: grupo con nombre y `aria-pressed` en Lista/Calendario. Detalle de cotización: el botón de estado muestra el texto "Cambiar", tiene borde y foco visibles y `title`.
+- Archivos: `src/app/(protected)/historico/page.tsx`, `src/app/(protected)/ventas/page.tsx`, `src/app/(protected)/quotations/[id]/page.tsx`.
+- Validación: TypeScript, `check:finance-ui`, suite completa 702/702 y lint:ci sin regresiones (los diagnósticos de `historico/page.tsx` son previos). Chrome headless con fixture en `/historico`: enlaces con `returnTo` que conserva los filtros, etiquetas Desde/Hasta y foco con Tab sobre el enlace de la cotización, sin excepciones JavaScript.
+- Pendiente: verificar en navegador con sesión real Mi día y el botón de estado (no cubiertos por el fixture). Siguientes pasos acordados, por separado: crear cliente desde la cotización y seleccionarlo automáticamente; "Registrar envío realizado" y "Registrar aceptación del cliente" con las transiciones y permisos existentes; luego paginación en servidor, unificación gradual de formularios y traspaso a Operaciones sin hacer obligatorio el proveedor al ganar. Hash de commit: `058c939`.
+
+### 25/11/2026 - UX-SALES-02 - Ventas: crear cliente desde la cotización y seleccionarlo automáticamente
+
+- Estado: publicado en Production el 25/11/2026 (PR #10, fast-forward de `main` a `17cb23e`; despliegue Vercel Production exitoso). Smoke anónimo: `/` y `/login` 200; `/quotations/new`, `/historico` y `/clientes` 404 sin sesión (rutas protegidas). Sin SQL ni cambios de permisos.
+- Causa: el selector de cliente de la cotización no permitía crear clientes. El alta rápida de la barra superior no devolvía el cliente creado y su aviso "Completar perfil" navegaba fuera de la pantalla, con riesgo de perder la cotización en curso.
+- Cambio: `ClienteCombobox` acepta `onCreateRequest` y muestra "Crear cliente «texto buscado»" (también con Enter cuando no hay resultados). `NewClientDialog` acepta `initialName` (precarga el nombre buscado sin pisar lo escrito) y `onCreated`; con `onCreated` no navega, devuelve el cliente creado y avisa "creado y seleccionado". En Nueva y Editar cotización el cliente creado se lee completo, se agrega a la lista y se selecciona, cargando su contacto, país y origen frecuente como cualquier cliente elegido. Visible para todos los roles salvo Contabilidad (misma regla que el listado de Clientes); el alta sigue usando `createClienteRecord` y la RLS existente. La barra superior y otros usos del selector no cambian.
+- Archivos: `src/components/ui/ClienteCombobox.tsx`, `src/components/clientes/NewClientDialog.tsx`, `src/components/quotations/QuotationClientProductSection.tsx`, `src/app/(protected)/quotations/new/page.tsx`, `src/app/(protected)/quotations/[id]/edit/page.tsx`, `tests/quotation-inline-client.test.mjs`, `tests/miami-insurance-create.test.mjs` (mock del diálogo).
+- Validación: TypeScript, `check:finance-ui`, lint:ci sin regresiones y suite completa 704/704. Pruebas nuevas sobre la página real de Nueva cotización: Ventas ve la opción, el diálogo abre con el nombre buscado y el cliente creado queda seleccionado con su contacto; Contabilidad no ve la opción. Chrome headless con selector y diálogo reales sobre datos simulados: opción con el texto buscado, Enter sin resultados abre el alta con nombre precargado, el cliente creado queda seleccionado y se muestra el aviso, sin excepciones JavaScript.
+- Pendiente: UAT autenticada (alta real y RLS de `clientes`). `createClienteRecord` sigue localizando el cliente recién creado por vendedor y nombre (comportamiento previo); con dos clientes homónimos del mismo vendedor creados casi al mismo tiempo podría tomar el más reciente. Hash de commit: `8696a21`.
+
+## DEMO-SYNC-20261125 - Sincronizacion puntual main hacia Demo (25/11/2026)
+
+- Estado: integracion preparada contra main 1819a343351b61067340ade7eda5d05ddcbe97a7; publicacion y SQL remoto pendientes al crear este commit. Sin automatizacion de sincronizacion.
+- Archivos: merge del codigo compartido de main; resolucion de conflictos preservando marcas PDF/HTML, hostname/noindex, acceso temporal, branding Atlas y bloqueo de invitaciones/correo/Storage. docs/quality/environment-parity.json actualiza cuatro pares de huellas revisadas. scripts/validate-demo-sql.mjs incorpora la nueva regresion de acceso.
+- SQL: 23 migraciones compartidas de noviembre y 20261125180000_demo_sync_access_guards.sql (solo Demo). La nueva migracion extiende las politicas restrictivas de acceso temporal a las tablas nuevas y verifica Storage privado. No se modifica SQL historico aplicado. Outlook 20261002120000 permanece standby.
+- Validaciones: TypeScript OK, finance UI OK, 710/710 pruebas Node, lint 685 archivos/0 regresiones. Ensayo remoto oficial con rollback de las 24 migraciones: 139 tablas preexistentes preservadas exactamente; 173 tablas con RLS. Ensayo separado con rollback de demo_production_parity.sql: tenant, sentinel, Storage, borradores, master individual y acceso caducado OK.
+- Build: compilacion Next y TypeScript OK en primer intento; postbuild OCR fallo con dependencias enlazadas; instalacion aislada y repeticion pendientes. CI, paridad final, aplicacion SQL y Preview/smoke se registraran en el cierre.
+- Riesgos/pendientes: UAT autenticada de los nuevos flujos de compras, RRHH, Pricing, Operaciones y Ventas. Storage sigue bloqueado en Demo por diseno; no se copian clientes, documentos, credenciales ni datos de Production. No se habilita correo ni Outlook. Hash: pendiente del commit de merge.
+
+- Revision adicional: la nueva ruta HR de main carga archivos mediante service_role; Demo la bloquea antes de autenticar o leer archivos para preservar el limite de Storage. Variante de paridad y regresion tests/demo-hr-documents.test.mjs agregadas.

@@ -262,3 +262,7 @@ no requiere modificar skills globales ni instalar plugins.
 Los estados históricos no deben reintroducirse como transiciones actuales.
 Las opciones comerciales tienen su propio ciclo en `src/lib/quotation-options.ts`.
 Consultar el código y las migraciones vigentes antes de cambiar cualquiera de ambos.
+
+### Campos numéricos de Finanzas
+
+Usar el estándar técnico de `skills/sari-erp-maintenance/references/ui-conventions.md`: `FinanceNumberInput` y `finance-field-row`. No usar controles numéricos genéricos ni sobrescribir sus medidas. Ejecutar `npm run check:finance-ui`; CI y prebuild tambi?n lo exigen.

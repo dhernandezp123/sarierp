@@ -48,6 +48,7 @@ import { DuplicateCargoNotice, type DuplicateCargoNoticeData } from '@/src/compo
 import { QuotationActionBar } from '@/src/components/quotations/QuotationActionBar'
 import { QuotationCargoSection } from '@/src/components/quotations/QuotationCargoSection'
 import { QuotationClientProductSection } from '@/src/components/quotations/QuotationClientProductSection'
+import NewClientDialog, { type CreatedClient } from '@/src/components/clientes/NewClientDialog'
 import { QuotationConditionsSection } from '@/src/components/quotations/QuotationConditionsSection'
 import { QuotationContactSection } from '@/src/components/quotations/QuotationContactSection'
 import { QuotationInsuranceSection } from '@/src/components/quotations/QuotationInsuranceSection'
@@ -325,6 +326,7 @@ export default function NewQuotationPage() {
         : sourceQuote.quote_type || ''
       setFormData({
         cliente_id: toFormString(sourceQuote.cliente_id),
+        miami_rate_destination: sourceQuote.miami_rate_destination || '',
         trade_direction: sourceQuote.trade_direction || 'import',
         service_product: sourceQuote.service_product || '',
         quote_type: copyQuoteType,
@@ -532,15 +534,38 @@ export default function NewQuotationPage() {
     applyServiceProductChange(serviceProduct)
   }
 
-  const handleClienteChange = (clienteId: string) => {
+  // Cliente creado desde el selector: se carga completo, se agrega a la lista y se selecciona.
+  const [newClientName, setNewClientName] = useState<string | null>(null)
+  const canCreateClient = Boolean(profile?.rol) && profile?.rol !== 'Contabilidad'
+  const handleClientCreated = async (created: CreatedClient) => {
+    const { data } = await supabase
+      .from('clientes')
+      .select(`
+        *,
+        vendedor:profiles!clientes_vendedor_asignado_fkey (
+          id,
+          nombre,
+          apellido
+        )
+      `)
+      .eq('id', created.id)
+      .maybeSingle()
+    const row = data || created
+    setClientes((current) => [row, ...current.filter((cliente) => cliente.id !== row.id)])
+    handleClienteChange(row.id, row)
+  }
 
-    const selectedCliente = clientes.find(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleClienteChange = (clienteId: string, knownCliente?: any) => {
+
+    const selectedCliente = knownCliente || clientes.find(
       (cliente) => cliente.id === clienteId
     )
 
     const updatedData = {
       ...formData,
       cliente_id: clienteId,
+      miami_rate_destination: clienteId === formData.cliente_id ? formData.miami_rate_destination : '',
       requires_insurance: clienteId === formData.cliente_id ? formData.requires_insurance : null,
       insurance_taxable: clienteId === formData.cliente_id && formData.insurance_taxable,
       contact_name: selectedCliente?.contacto || '',
@@ -653,6 +678,10 @@ export default function NewQuotationPage() {
     try {
       setLoading(true)
 
+      if (miami.isMiamiFlow && !miami.canUseMiamiCalculator) {
+        toast.error(miami.ratesError || `Configura las tarifas de ${miami.miamiRateDestination} antes de guardar.`)
+        return
+      }
       const quotationId = crypto.randomUUID()
       const automaticPricing = isCustomsFlow
         ? { items: buildCustomsPricingItems(quotationId, customsCharges, miami.taxRatePercent, companyBranding?.trade_name || 'Sari Express', profile?.id), error: null, insurance: null }
@@ -663,6 +692,7 @@ export default function NewQuotationPage() {
       }
       const quotationPayload = {
         id: quotationId,
+        miami_rate_destination: miami.isMiamiFlow ? miami.miamiRateDestination : null,
         cliente_id: formData.cliente_id,
 
         trade_direction: formData.trade_direction,
@@ -938,6 +968,7 @@ export default function NewQuotationPage() {
 
   const miami = useMiamiQuotation({
     clienteId: formData.cliente_id,
+    rateDestination: formData.miami_rate_destination || clientes.find(cliente => cliente.id === formData.cliente_id)?.preferred_miami_rate_destination,
     serviceProduct: formData.service_product,
     incoterm: formData.incoterm,
     totalCargoFt3,
@@ -1018,6 +1049,7 @@ export default function NewQuotationPage() {
 
     return {
       ...formData,
+      miami_rate_destination: miami.isMiamiFlow ? miami.miamiRateDestination : null,
       id: 'preview',
       requires_insurance: requiresCargoInsurance,
       quotation_number: 'PREVIEW',
@@ -1098,6 +1130,12 @@ export default function NewQuotationPage() {
   return (
     <>
       <UnsavedChangesGuard />
+      <NewClientDialog
+        open={newClientName !== null}
+        onOpenChange={(open) => { if (!open) setNewClientName(null) }}
+        initialName={newClientName || ''}
+        onCreated={handleClientCreated}
+      />
       <div className="max-w-6xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -1158,6 +1196,7 @@ export default function NewQuotationPage() {
           formData={formData}
           handleChange={handleChange}
           onClientChange={handleClienteChange}
+          onCreateClient={canCreateClient ? (name) => setNewClientName(name) : undefined}
           onServiceProductChange={handleServiceProductChange}
           serviceProductOptions={serviceProductOptions}
           reqClass={reqClass}

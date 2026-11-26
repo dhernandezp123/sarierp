@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowRight, BellRing, BriefcaseBusiness, Clock3, RefreshCw, Ship } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { AccountingAlertsPanel } from '@/src/components/accounting/AccountingAlertsPanel'
 import { supabase } from '@/src/lib/supabase/client'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
@@ -121,6 +122,7 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-6">
+      <AccountingAlertsPanel />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">

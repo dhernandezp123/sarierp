@@ -31,6 +31,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm run check:finance-ui
       - run: npx tsc --noEmit
       - name: Reviewed parity with Production source
         run: node scripts/check-environment-parity.mjs origin/main .

@@ -1,0 +1,33 @@
+\set ON_ERROR_STOP on
+begin;
+create function pg_temp.assert_true(v boolean,m text) returns void language plpgsql as $$begin if not coalesce(v,false) then raise exception 'ASSERTION FAILED: %',m;end if;end $$;
+create function pg_temp.denied(c text) returns void language plpgsql as $$begin begin execute c;exception when insufficient_privilege then return;end;raise exception 'Expected permission denial';end $$;
+create function pg_temp.wrong_tenant(c text) returns void language plpgsql as $$begin begin execute c;exception when foreign_key_violation then return;end;raise exception 'Expected tenant FK denial';end $$;
+insert into public.tenants(id,slug,name) values('ce050000-0000-4000-8000-000000000099','email-test-other','Otra empresa ficticia');
+insert into auth.users(id,aud,role,email,raw_user_meta_data) values('ce050000-0000-4000-8000-000000000001','authenticated','authenticated','accounting-test-one@example.invalid','{}'),('ce050000-0000-4000-8000-000000000002','authenticated','authenticated','accounting-test-other@example.invalid','{}');
+update public.profiles set rol='Contabilidad',status='Aprobado',is_active=true,tenant_id='00000000-0000-4000-8000-000000000001' where id::text like 'ce050000-%';
+update public.profiles set tenant_id='ce050000-0000-4000-8000-000000000099' where id='ce050000-0000-4000-8000-000000000002';
+insert into public.clientes(id,tenant_id,nombre,email_1) values('ce050100-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','Cliente ficticio de prueba','test@example.invalid');
+create temp table fiscal_before as select (select count(*) from public.invoices) invoices,(select count(*) from public.journal_entries) entries;
+update public.platform_environment set environment='production',verified_at=now(),verified_by='Controlled email isolated rollback fixture';
+set local role service_role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+insert into public.accounting_email_tests(tenant_id,cliente_id,request_id,recipient_email,authorization_reason)
+values('00000000-0000-4000-8000-000000000001','ce050100-0000-4000-8000-000000000001','ce050200-0000-4000-8000-000000000001','test@example.invalid','Prueba controlada expresamente autorizada');
+select pg_temp.wrong_tenant($q$insert into public.accounting_email_tests(tenant_id,cliente_id,request_id,recipient_email,authorization_reason) values('ce050000-0000-4000-8000-000000000099','ce050100-0000-4000-8000-000000000001',gen_random_uuid(),'test@example.invalid','Intento con cliente de otra empresa')$q$);
+reset role;
+select set_config('request.jwt.claims','{}',true);
+select public.process_accounting_alerts();
+select pg_temp.assert_true((select status='pending' and attempts=0 from public.accounting_email_tests),'Scheduler no entrega pruebas de correo');
+select pg_temp.assert_true((select count(*)=(select invoices from fiscal_before) from public.invoices) and (select count(*)=(select entries from fiscal_before) from public.journal_entries),'Prueba de correo no crea documentos fiscales ni asientos');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"ce050000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select pg_temp.assert_true((select count(*)=1 from public.accounting_email_tests),'Contabilidad consulta auditoria de su empresa');
+select pg_temp.denied($q$update public.accounting_email_tests set status='sent'$q$);
+select pg_temp.denied($q$delete from public.accounting_email_tests$q$);
+select set_config('request.jwt.claims','{"sub":"ce050000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select pg_temp.assert_true((select count(*)=0 from public.accounting_email_tests),'RLS oculta pruebas ajenas');
+reset role;
+select pg_temp.assert_true(not has_table_privilege('anon','public.accounting_email_tests','SELECT'),'Anon no consulta auditoria');
+select pg_temp.assert_true(not has_table_privilege('authenticated','public.accounting_email_tests','INSERT'),'Solo servidor registra pruebas autorizadas');
+rollback;

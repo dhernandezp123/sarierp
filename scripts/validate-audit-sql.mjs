@@ -7,6 +7,11 @@ if (!process.env.CI && !process.argv.includes('--isolated')) {
   throw new Error('Outside CI use --isolated; the normal development database is never a test target.')
 }
 const files = [
+  'bl_missing_quotation_cargo_sources.sql',
+  'bl_insert_returning_rls.sql',
+  'admin_shipping_instruction_handoff.sql',
+  'operations_simplified_flow.sql',
+  'miami_quotation_rate_destination.sql',
   'platform_admin_console.sql',
   'accounting_access.sql',
   'billing_points_of_sale.sql',
@@ -18,19 +23,27 @@ const files = [
   'fiscal_offices.sql', 'fiscal_invoice_workflow.sql', 'customer_collections.sql',
   'accounting_engine.sql',
   'accounting_catalog_structure.sql',
+  'service_accounting_assignments.sql', 'invoice_due_date_override.sql', 'purchase_requests_and_orders.sql', 'supplier_type_catalog.sql', 'supplier_default_expense_account.sql', 'purchase_optional_supplier_identity.sql', 'hr_employees_and_leave.sql', 'hr_vacation_periods.sql',
+  'hr_activity_and_calendar.sql', 'hr_certificates_and_documents.sql', 'hr_email_outbox.sql', 'hr_payroll.sql', 'hr_automatic_benefits.sql',
   'accounting_financial_sources.sql',
   'fixed_assets.sql',
   'accounting_currency.sql',
   'fiscal_discounts.sql',
   'fiscal_void_approval.sql',
   'invoice_drafts_and_master_review.sql',
+  'invoice_courtesy_permissions.sql',
+  'invoice_line_courtesies.sql',
+  'accounting_alerts_and_client_activity.sql',
+  'accounting_controlled_email_tests.sql',
   'finance_reporting_and_banks.sql',
   'agent_quote_internal_notes.sql',
+  'fcl_initial_agent_selection.sql',
+  'air_consolidated_agent_selection.sql',
   'customs_only_service.sql',
   'demo_request_server.sql',
   'sales_activity_execution_status.sql',
   'aud01_pricing_write_permissions.sql', 'aud02_supplier_payments.sql',
-  'client_rate_access_and_audit.sql',
+  'client_rate_access_and_audit.sql', 'compact_client_rate_history.sql', 'client_rate_sparse_save.sql',
   'aud03_supplier_payable_balances.sql', 'aud05_quotation_transitions.sql', 'won_quotation_pricing_adjustments.sql',
   'aud06_miami_assignment.sql', 'aud07_verified_environment.sql', 'aud08_email_delivery.sql', 'aud11_portal_incidents.sql',
 ]
@@ -38,7 +51,7 @@ for (const file of files) {
   let sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8').replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))
   sql = sql.replaceAll('-- APPLY_LATEST_TGU_CONFIRMATION_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028180000_tgu_confirmed_fiscal_prefix.sql', import.meta.url), 'utf8'))
   sql = sql.replaceAll('-- APPLY_RESTORED_TGU_PREFIX_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261029170000_restore_tgu_registered_cai_prefix.sql', import.meta.url), 'utf8'))
-  if (/^(billing_points_of_sale|cai_|tgu_|fiscal_|customer_collections|accounting_|fixed_assets|invoice_drafts_|finance_reporting_)/.test(file)) {
+  if (/^(billing_points_of_sale|cai_|tgu_|fiscal_|customer_collections|accounting_|service_accounting_|fixed_assets|invoice_drafts_|finance_reporting_)/.test(file)) {
     sql = sql.replace(/^begin;/im, "begin;\nset local time zone 'America/Tegucigalpa';")
   }
   const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-X', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], {

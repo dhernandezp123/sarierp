@@ -5,6 +5,7 @@ import { getCargoStructure, usesOwnPricing } from '@/src/lib/quotation-products'
 
 export const createInitialQuotationForm = (validUntil: string) => ({
   cliente_id: '',
+  miami_rate_destination: '',
 
   trade_direction: 'import',
   service_product: '',

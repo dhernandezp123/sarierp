@@ -1,9 +1,23 @@
 'use client'
 
 import type React from 'react'
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { Download, FileText, Lock, Trash2, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { SidePanel } from '@/src/components/ui/side-panel'
+import { BillOfLadingEditor } from '@/src/components/operations/BillOfLadingEditor'
+import { OperationDialogContent } from '@/src/components/operations/OperationDialog'
+import { ArrowLeft, Download, FileText, Lock, Package, Ship, Trash2, Upload } from 'lucide-react'
+import { FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
+import {
+  OperationSaveBar,
+  OperationStatusBadge,
+  operationDangerSolidButtonClass,
+  operationPrimaryButtonClass,
+  operationSecondaryButtonClass,
+} from '@/src/components/operations/OperationsWorkspace'
+import { UnsavedChangesGuard, requestFormNavigation } from '@/src/components/ui/UnsavedChangesGuard'
+import { formatDate } from '@/src/lib/format'
+import { effectiveRemainingFreeDays, lastFreeDay, realTransitDays } from '@/src/lib/booking-transit'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
@@ -13,7 +27,6 @@ import { supabase } from '@/src/lib/supabase/client'
 import ArrivalNoticePdf, { type ArrivalNoticeData } from '@/src/components/pdf/arrival-notice-pdf'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -190,62 +203,65 @@ type BillOfLading = {
   created_at: string | null
 }
 
+type BookingFlowStep = 'confirm' | 'ready' | 'departure' | 'arrival' | 'deliver_finalize'
+
 type BookingAction = {
-  kind: 'transition' | 'delivery'
+  step: BookingFlowStep
   label: string
-  targetStatus?: string
   description: string
+  /** Salida, arribo y entrega piden fecha, ubicación y notas; el resto es un clic. */
+  physical: boolean
+  successMessage: string
 }
 
-const bookingTransitionActions: Record<string, BookingAction> = {
-  'Pendiente Validación': {
-    kind: 'transition',
-    label: 'Solicitar booking',
-    targetStatus: 'Booking Solicitado',
-    description: 'Inicia formalmente la gestión del booking.',
-  },
-  'Listo para Booking': {
-    kind: 'transition',
-    label: 'Solicitar booking',
-    targetStatus: 'Booking Solicitado',
-    description: 'Inicia formalmente la gestión del booking.',
-  },
-  'Booking Solicitado': {
-    kind: 'transition',
+const bookingFlowActions: Record<BookingFlowStep, BookingAction> = {
+  confirm: {
+    step: 'confirm',
     label: 'Confirmar booking',
-    targetStatus: 'Booking Confirmado',
-    description: 'Valida los datos mínimos y registra la confirmación.',
+    description: 'Valida referencia, naviera, ETD/ETA y contenedores, y confirma el booking.',
+    physical: false,
+    successMessage: 'Booking confirmado',
   },
-  'Booking Confirmado': {
-    kind: 'transition',
-    label: 'Marcar documentación pendiente',
-    targetStatus: 'Documentación Pendiente',
-    description: 'Continúa a la preparación documental del embarque.',
-  },
-  'Documentación Pendiente': {
-    kind: 'transition',
+  ready: {
+    step: 'ready',
     label: 'Marcar listo para embarque',
-    targetStatus: 'Listo para Embarque',
-    description: 'Valida nave, viaje, contenedores y documentos mínimos.',
+    description: 'Valida buque, viaje, contenedores, documentos mínimos y readiness.',
+    physical: false,
+    successMessage: 'Booking listo para embarque',
   },
-  'Listo para Embarque': {
-    kind: 'transition',
-    label: 'Registrar embarque',
-    targetStatus: 'Embarcado',
-    description: 'Registra la fecha real de embarque y el evento ON BOARD.',
+  departure: {
+    step: 'departure',
+    label: 'Registrar salida',
+    description: 'Registra la salida real del buque: el booking queda embarcado y en tránsito.',
+    physical: true,
+    successMessage: 'Salida registrada; booking en tránsito',
   },
-  Embarcado: {
-    kind: 'transition',
-    label: 'Marcar en tránsito',
-    targetStatus: 'En Tránsito',
-    description: 'Registra la salida real de la nave.',
-  },
-  'En Tránsito': {
-    kind: 'transition',
+  arrival: {
+    step: 'arrival',
     label: 'Registrar arribo',
-    targetStatus: 'Arribado',
     description: 'Registra el arribo real de este booking.',
+    physical: true,
+    successMessage: 'Arribo registrado',
   },
+  deliver_finalize: {
+    step: 'deliver_finalize',
+    label: 'Registrar entrega y finalizar',
+    description: 'Registra la entrega y cierra el booking. Si es el último booking activo, también cierra la operación.',
+    physical: true,
+    successMessage: 'Entrega registrada y booking finalizado',
+  },
+}
+
+const bookingStepByStatus: Record<string, BookingFlowStep> = {
+  'Pendiente Validación': 'confirm',
+  'Listo para Booking': 'confirm',
+  'Booking Solicitado': 'confirm',
+  'Booking Confirmado': 'ready',
+  'Documentación Pendiente': 'ready',
+  'Listo para Embarque': 'departure',
+  Embarcado: 'departure',
+  'En Tránsito': 'arrival',
+  Arribado: 'deliver_finalize',
 }
 
 const BOOKING_DOCUMENT_BUCKET = 'booking-documents'
@@ -274,9 +290,35 @@ const fieldHintClass = {
     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   referencia:
     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  calculado:
+    'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
 } as const
 
 type FieldHint = keyof typeof fieldHintClass
+const fieldHintLabel: Record<FieldHint, string> = {
+  cotizacion: 'Cotización',
+  shipping: 'SI',
+  referencia: 'Referencia',
+  calculado: 'Calculado',
+}
+
+// Campos editables del booking; definen "cambios sin guardar" junto con los contenedores.
+const editableBookingFields = [
+  'master_bl', 'house_bl', 'tracking_url', 'estimated_transit_days',
+  'real_transit_days', 'free_days', 'remaining_free_days', 'freight_terms',
+  'release_type', 'hbl_freight_visibility', 'printed_at_destination',
+  'operational_comments',
+] as const
+
+function bookingSnapshot(booking: object | null) {
+  if (!booking) return ''
+  const values = booking as Record<string, unknown>
+  return JSON.stringify(editableBookingFields.map((field) => values[field] ?? null))
+}
+
+function containersSnapshot(rows: Array<{ container_type: string; quantity: number | ''; notes: string }>) {
+  return JSON.stringify(rows.map((row) => [row.container_type, Number(row.quantity || 0), row.notes]))
+}
 
 function resolveJoin<T>(value: T | T[] | null): T | null {
   if (!value) return null
@@ -323,7 +365,7 @@ function Field({
               fieldHintClass[readonlySource]
             )}
           >
-            {readonlySource === 'cotizacion' ? 'cotizacion' : readonlySource}
+            {fieldHintLabel[readonlySource]}
           </span>
         )}
       </label>
@@ -406,6 +448,12 @@ export default function RoutingBookingChildPage() {
   const { profile } = useUser()
   const id = params.id
   const bookingId = params.bookingId
+  const searchParams = useSearchParams()
+  // El BL abierto vive en la URL (?bl=...): Atrás lo cierra y el enlace se puede compartir.
+  const blPanelId = searchParams.get('bl')
+  const blPanelType = searchParams.get('blType') === 'HBL' ? 'HBL' : 'MBL'
+  const blPanelParent = searchParams.get('parentBlId')
+  const blPanelPushed = useRef(false)
   const returnHref = typeof window === 'undefined'
     ? '/operations/shipping-instructions'
     : operationsReturnHref(
@@ -427,6 +475,8 @@ export default function RoutingBookingChildPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingContainers, setSavingContainers] = useState(false)
+  const [savedBookingSnapshot, setSavedBookingSnapshot] = useState('')
+  const [savedContainersSnapshot, setSavedContainersSnapshot] = useState('')
   const [bookingDocuments, setBookingDocuments] = useState<BookingDocument[]>([])
   const [documentUserNames, setDocumentUserNames] = useState<Record<string, string>>({})
   const [documentType, setDocumentType] = useState(bookingDocumentTypes[0])
@@ -697,9 +747,10 @@ export default function RoutingBookingChildPage() {
 
     setRouting(routingData as RoutingData)
     setBooking(bookingData as BookingData)
+    setSavedBookingSnapshot(bookingSnapshot(bookingData))
     setAvailableContainers(quotedContainers)
     setAssignedInOtherBookings(Object.values(groupContainers(assignedByOthers)))
-    setContainerRows(
+    const loadedContainerRows = (
       ((currentContainersData || []) as StoredBookingContainerData[]).map(
         (container) => ({
           id: container.id,
@@ -709,6 +760,8 @@ export default function RoutingBookingChildPage() {
         })
       )
     )
+    setContainerRows(loadedContainerRows)
+    setSavedContainersSnapshot(containersSnapshot(loadedContainerRows))
     await loadBookingDocuments((bookingData as BookingData).id)
     await loadBillsOfLading((bookingData as BookingData).id)
     await loadTimeline((bookingData as BookingData).id)
@@ -754,8 +807,8 @@ export default function RoutingBookingChildPage() {
     }
   }
 
-  const saveBooking = async () => {
-    if (!booking) return
+  const saveBooking = async (notify = true) => {
+    if (!booking) return false
 
     setSaving(true)
 
@@ -768,9 +821,11 @@ export default function RoutingBookingChildPage() {
         house_bl: booking.house_bl,
         tracking_url: booking.tracking_url,
         estimated_transit_days: booking.estimated_transit_days,
-        real_transit_days: booking.real_transit_days,
+        // Con salida y arribo reales el dato se calcula; sin ellos se respeta la captura manual.
+        real_transit_days: realTransitDays(booking.actual_etd, booking.actual_eta) ?? booking.real_transit_days,
         free_days: booking.free_days,
-        remaining_free_days: booking.remaining_free_days,
+        // Con arribo real y días libres se guarda el valor calculado del día.
+        remaining_free_days: effectiveRemainingFreeDays(booking),
         freight_terms: booking.freight_terms,
         release_type: booking.release_type,
         hbl_freight_visibility: booking.hbl_freight_visibility,
@@ -786,22 +841,49 @@ export default function RoutingBookingChildPage() {
         toast.error(
           'Este booking fue modificado por otro usuario. Recarga la página antes de guardar nuevamente.'
         )
-        return
+        return false
       }
 
       toast.error(error.message || 'No se pudo guardar el booking')
-      return
+      return false
     }
 
     const updatedBooking = Array.isArray(data) ? data[0] : data
     if (updatedBooking) {
       setBooking(updatedBooking as BookingData)
+      setSavedBookingSnapshot(bookingSnapshot(updatedBooking))
     }
 
-    toast.success('Booking actualizado')
+    if (notify) toast.success('Booking actualizado')
+    return true
+  }
+
+  const bookingDirty = Boolean(booking && savedBookingSnapshot) && bookingSnapshot(booking) !== savedBookingSnapshot
+  const containersDirty = Boolean(booking) && containersSnapshot(containerRows) !== savedContainersSnapshot
+  const isDirty = bookingDirty || containersDirty
+
+  // Un solo guardado para los datos del booking y sus contenedores.
+  const saveAllChanges = async () => {
+    if (bookingDirty && !(await saveBooking(false))) return false
+    if (containersDirty && !(await saveBookingContainers(false))) return false
+    toast.success('Cambios guardados')
+    return true
   }
 
   const openBookingAction = async (action: BookingAction) => {
+    // Los pasos validan los datos guardados: se guarda primero lo editado.
+    let expectedUpdatedAt = booking?.updated_at || null
+    if (isDirty) {
+      if (!(await saveAllChanges())) return
+      const { data: current } = await supabase.from('bookings').select('updated_at').eq('id', bookingId).single()
+      expectedUpdatedAt = current?.updated_at || expectedUpdatedAt
+    }
+
+    if (!action.physical) {
+      await runBookingStep(action, { expectedUpdatedAt })
+      return
+    }
+
     setPendingAction(action)
     setActionOccurredAt(toLocalDateTimeInput())
     setActionLocation('')
@@ -809,14 +891,8 @@ export default function RoutingBookingChildPage() {
     setActionError('')
     setActionReadiness(null)
 
-    if (
-      action.kind === 'transition' &&
-      ['Listo para Embarque', 'Embarcado'].includes(action.targetStatus || '')
-    ) {
-      const { data, error } = await supabase.rpc(
-        'evaluate_booking_readiness',
-        { p_booking_id: bookingId }
-      )
+    if (action.step === 'departure') {
+      const { data, error } = await supabase.rpc('evaluate_booking_readiness', { p_booking_id: bookingId })
       if (!error && data) {
         const current = data as BookingReadinessEvaluation
         setActionReadiness(current)
@@ -826,64 +902,63 @@ export default function RoutingBookingChildPage() {
   }
 
   const runBookingAction = async () => {
-    if (!booking || !pendingAction) return
-
+    if (!pendingAction) return
     const parsedOccurredAt = new Date(actionOccurredAt)
     if (Number.isNaN(parsedOccurredAt.getTime())) {
       setActionError('Indica una fecha y hora de ocurrencia válida.')
       return
     }
+    await runBookingStep(pendingAction, {
+      occurredAt: parsedOccurredAt.toISOString(),
+      location: actionLocation.trim() || null,
+      notes: actionNotes.trim() || null,
+    })
+  }
 
+  // Confirmar la referencia confirma el booking si ya cumple naviera, ETD/ETA y
+  // contenedores; si falta algo, se informa sin tratarlo como error.
+  const confirmAfterReference = async () => {
+    const { data: current } = await supabase
+      .from('bookings')
+      .select('shipment_status, updated_at')
+      .eq('id', bookingId)
+      .single()
+    if (!current || bookingStepByStatus[current.shipment_status || 'Booking Solicitado'] !== 'confirm') {
+      await loadData()
+      return
+    }
+    await runBookingStep(bookingFlowActions.confirm, { expectedUpdatedAt: current.updated_at, softFailure: true })
+    await loadData()
+  }
+
+  // Un paso de negocio puede aplicar varias transiciones (todas con sus validaciones).
+  const runBookingStep = async (
+    action: BookingAction,
+    options: { expectedUpdatedAt?: string | null; occurredAt?: string; location?: string | null; notes?: string | null; softFailure?: boolean } = {}
+  ) => {
+    if (!booking) return
     setRunningAction(true)
     setActionError('')
 
-    if (pendingAction.kind === 'delivery') {
-      const { error } = await supabase.rpc('record_operational_event', {
-        p_shipping_instruction_id: id,
-        p_booking_id: booking.id,
-        p_booking_container_id: null,
-        p_event_code: 'DELIVERED',
-        p_event_label: 'Entrega registrada',
-        p_occurred_at: parsedOccurredAt.toISOString(),
-        p_location: actionLocation.trim() || null,
-        p_notes: actionNotes.trim() || null,
-        p_metadata: {},
-      })
-
-      setRunningAction(false)
-
-      if (error) {
-        setActionError(error.message || 'No se pudo registrar la entrega.')
-        return
-      }
-
-      setPendingAction(null)
-      toast.success('Entrega registrada')
-      await loadTimeline(booking.id)
-      return
-    }
-
-    const { data, error } = await supabase.rpc('transition_booking_status', {
+    const { data, error } = await supabase.rpc('advance_booking_flow', {
       p_booking_id: booking.id,
-      p_expected_updated_at: booking.updated_at,
-      p_target_status: pendingAction.targetStatus,
-      p_occurred_at: parsedOccurredAt.toISOString(),
-      p_location: actionLocation.trim() || null,
-      p_notes: actionNotes.trim() || null,
-      p_metadata: {},
+      p_expected_updated_at: options.expectedUpdatedAt ?? booking.updated_at,
+      p_step: action.step,
+      p_occurred_at: options.occurredAt || new Date().toISOString(),
+      p_location: options.location ?? null,
+      p_notes: options.notes ?? null,
     })
 
     setRunningAction(false)
 
     if (error) {
-      const conflict =
-        error.code === '40001' ||
-        error.message?.includes('BOOKING_VERSION_CONFLICT')
+      const conflict = error.code === '40001' || error.message?.includes('BOOKING_VERSION_CONFLICT')
       const message = conflict
         ? 'Este booking cambió en otra sesión. Recarga la página antes de continuar.'
-        : error.message || 'No se pudo cambiar el estado del booking.'
-
-      setActionError(message)
+        : error.message || 'No se pudo avanzar el booking.'
+      if (action.physical) setActionError(message)
+      else if (options.softFailure) toast.info('Referencia confirmada; el booking se confirmará cuando esté completo', { description: message })
+      else toast.error(`No se pudo: ${action.label.toLowerCase()}`, { description: message })
       return
     }
 
@@ -901,46 +976,72 @@ export default function RoutingBookingChildPage() {
     } | null
 
     if (result?.transitioned === false) {
-      const missingRequirements = (
-        result.error?.missing_requirements || []
-      )
-        .filter((requirement) => requirement.blocking)
-        .map((requirement) => requirement.label)
       const blockers = [
-        ...missingRequirements,
+        ...(result.error?.missing_requirements || [])
+          .filter((requirement) => requirement.blocking)
+          .map((requirement) => requirement.label),
         ...(result.error?.overdue_cutoffs || []).map(
           (cutoff) => `Cut-off vencido: ${cutoff.label || 'sin etiqueta'}`
         ),
         ...(result.error?.missing_vgm_containers || []).map(
-          (container) =>
-            `VGM pendiente: ${container.container_reference || 'contenedor sin referencia'}`
+          (container) => `VGM pendiente: ${container.container_reference || 'contenedor sin referencia'}`
         ),
       ]
+      const message = blockers.length > 0 ? blockers.join(' · ') : 'El booking no cumple los requisitos de readiness.'
       setActionReadiness(result.readiness || null)
       setReadinessEvaluation(result.readiness || null)
-      setActionError(
-        blockers.length > 0
-          ? blockers.join(' · ')
-          : 'El booking no cumple los requisitos de readiness.'
-      )
-      await loadTimeline(booking.id)
+      if (action.physical) setActionError(message)
+      else {
+        toast.error('Faltan requisitos para avanzar', { description: message })
+        document.getElementById('booking-readiness')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      await loadData()
       return
     }
 
     if (result?.booking) {
       setBooking(result.booking)
+      setSavedBookingSnapshot(bookingSnapshot(result.booking))
     }
-
     setPendingAction(null)
-    toast.success(`Estado actualizado a ${pendingAction.targetStatus}`)
-
+    toast.success(action.successMessage)
     if (result?.warnings?.length) {
-      toast.warning('Transición completada con advertencias', {
-        description: result.warnings.join(' '),
-      })
+      toast.warning('Avance completado con advertencias', { description: result.warnings.join(' ') })
     }
-
+    if (action.step === 'deliver_finalize') await closeOperationIfComplete()
     await loadTimeline(booking.id)
+  }
+
+  // Cierre único: al finalizar el último booking activo se cierra la operación
+  // con la misma RPC de la SI (que vuelve a validar bookings y contenedores).
+  const closeOperationIfComplete = async () => {
+    const { data: siblings, error: siblingsError } = await supabase
+      .from('bookings')
+      .select('shipment_status')
+      .eq('shipping_instruction_id', id)
+    if (siblingsError) return
+    const active = (siblings || []).filter((item) => item.shipment_status !== 'Cancelada')
+    if (active.length === 0 || active.some((item) => item.shipment_status !== 'Finalizado')) {
+      toast.info('La operación se cerrará cuando se finalicen los demás bookings.')
+      return
+    }
+    const { data: current } = await supabase
+      .from('shipping_instructions')
+      .select('updated_at, operational_status')
+      .eq('id', id)
+      .single()
+    if (!current || current.operational_status === 'Finalizado') return
+    const { error } = await supabase.rpc('finalize_shipping_instruction_canonical', {
+      p_shipping_instruction_id: id,
+      p_expected_updated_at: current.updated_at,
+    })
+    if (error) {
+      toast.warning('El booking se finalizó, pero la operación no se pudo cerrar', {
+        description: `${error.message}. Ciérrala desde la Shipping Instruction.`,
+      })
+      return
+    }
+    toast.success('Operación cerrada; Finanzas ya puede revisar los costos')
   }
 
   const addOperationalNote = async ({
@@ -1071,9 +1172,9 @@ export default function RoutingBookingChildPage() {
     return true
   }
 
-  const saveBookingContainers = async () => {
-    if (!booking) return
-    if (!validateContainerRows()) return
+  const saveBookingContainers = async (notify = true) => {
+    if (!booking) return false
+    if (!validateContainerRows()) return false
 
     setSavingContainers(true)
 
@@ -1093,7 +1194,7 @@ export default function RoutingBookingChildPage() {
     if (replaceError) {
       setSavingContainers(false)
       toast.error(replaceError.message || 'No se pudieron guardar los contenedores del booking')
-      return
+      return false
     }
 
     setSavingContainers(false)
@@ -1111,8 +1212,9 @@ export default function RoutingBookingChildPage() {
         ),
       },
     })
-    toast.success('Contenedores del booking guardados')
+    if (notify) toast.success('Contenedores del booking guardados')
     await loadData()
+    return true
   }
 
   const uploadBookingDocument = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1343,25 +1445,18 @@ export default function RoutingBookingChildPage() {
   const hasDeliveredEvent = timelineEvents.some(
     (event) => event.booking_id === booking.id && event.event_code === 'DELIVERED'
   )
-  const contextualAction =
-    booking.booking_lifecycle_status !== 'ACTIVE'
-      ? undefined
-      : booking.shipment_status === 'Arribado'
-      ? hasDeliveredEvent
-        ? {
-            kind: 'transition' as const,
-            label: 'Finalizar booking',
-            targetStatus: 'Finalizado',
-            description:
-              'Valida contenedores, entrega y requisitos obligatorios antes del cierre.',
-          }
-        : {
-            kind: 'delivery' as const,
-            label: 'Registrar entrega',
-            description:
-              'Registra la entrega antes de habilitar la finalización del booking.',
-          }
-      : bookingTransitionActions[booking.shipment_status || 'Booking Solicitado']
+  const contextualStep = booking.booking_lifecycle_status === 'ACTIVE'
+    ? bookingStepByStatus[booking.shipment_status || 'Booking Solicitado']
+    : undefined
+  const contextualAction = contextualStep
+    ? contextualStep === 'deliver_finalize' && hasDeliveredEvent
+      ? { ...bookingFlowActions.deliver_finalize, label: 'Finalizar booking' }
+      : bookingFlowActions[contextualStep]
+    : undefined
+  const computedTransitDays = realTransitDays(booking.actual_etd, booking.actual_eta)
+  const freeDaysComputed = booking.free_days !== null && booking.free_days !== undefined && Boolean(booking.actual_eta)
+  const remainingFreeDaysValue = effectiveRemainingFreeDays(booking)
+  const lastFreeDayDate = lastFreeDay(booking)
   const isArrived = ['Arribado', 'Finalizado'].includes(booking.shipment_status || '')
   const documentationItems = buildDocumentationWorkspace({
     shippingInstructionId: id,
@@ -1416,6 +1511,67 @@ export default function RoutingBookingChildPage() {
         }
       : null,
   })
+  const blPageHref = (targetBlId: string, type?: 'MBL' | 'HBL', parentBlId?: string | null) => {
+    const query = new URLSearchParams()
+    if (targetBlId === 'new') {
+      query.set('type', type || 'MBL')
+      if (parentBlId) query.set('parentBlId', parentBlId)
+    }
+    return `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${targetBlId}${query.size ? `?${query}` : ''}`
+  }
+  const setBlPanelUrl = (mode: 'push' | 'replace', targetBlId: string | null, type?: 'MBL' | 'HBL', parentBlId?: string | null) => {
+    const url = new URL(window.location.href)
+    for (const key of ['bl', 'blType', 'parentBlId']) url.searchParams.delete(key)
+    if (targetBlId) {
+      url.searchParams.set('bl', targetBlId)
+      if (targetBlId === 'new') {
+        url.searchParams.set('blType', type || 'MBL')
+        if (parentBlId) url.searchParams.set('parentBlId', parentBlId)
+      }
+    }
+    const next = url.pathname + url.search + url.hash
+    if (mode === 'push') window.history.pushState(null, '', next)
+    else window.history.replaceState(null, '', next)
+  }
+  const openBlPanel = (targetBlId: string, type?: 'MBL' | 'HBL', parentBlId?: string | null) => {
+    setBlPanelUrl(blPanelId ? 'replace' : 'push', targetBlId, type, parentBlId)
+    blPanelPushed.current = blPanelPushed.current || !blPanelId
+  }
+  // Si el panel se abrió desde esta pantalla, cerrar equivale a Atrás; si se
+  // llegó por enlace directo, solo se quita el parámetro. Con cambios sin
+  // guardar en el Booking no se usa Atrás, para no disparar su aviso de salida.
+  const closeBlPanel = () => {
+    if (blPanelPushed.current && !isDirty) {
+      blPanelPushed.current = false
+      window.history.back()
+    } else {
+      blPanelPushed.current = false
+      setBlPanelUrl('replace', null)
+    }
+    void refreshAfterBlChange()
+  }
+  // Enlaces del expediente documental hacia un BL se abren en el panel.
+  const openBlFromHref = (href: string) => {
+    const match = href.match(/\/bl\/([^/?#]+)(?:\?(.*))?$/)
+    if (!match) return false
+    const query = new URLSearchParams(match[2] || '')
+    openBlPanel(match[1], query.get('type') === 'HBL' ? 'HBL' : 'MBL', query.get('parentBlId'))
+    return true
+  }
+  // Al guardar en el panel se refresca la lista de BL; los números de BL del
+  // booking los sincroniza el editor, así que se recarga la versión del booking.
+  const refreshAfterBlChange = async () => {
+    await loadBillsOfLading(bookingId)
+    const { data } = await supabase
+      .from('bookings')
+      .select('master_bl, house_bl, updated_at')
+      .eq('id', bookingId)
+      .single()
+    if (!data) return
+    setBooking((current) => current ? { ...current, ...data } : current)
+    if (!isDirty) setSavedBookingSnapshot(bookingSnapshot({ ...booking, ...data }))
+  }
+
   const bookingPath = `/operations/shipping-instructions/${id}/bookings/${bookingId}`
   const returnQuery = returnHref.startsWith('/operations/dashboard')
     ? `?returnTo=${encodeURIComponent(returnHref)}`
@@ -1455,7 +1611,7 @@ export default function RoutingBookingChildPage() {
           port_of_loading: quotation?.origen || null,
           port_of_discharge: quotation?.destino || null,
           free_days: booking.free_days,
-          remaining_free_days: booking.remaining_free_days,
+          remaining_free_days: remainingFreeDaysValue,
           freight_terms: booking.freight_terms,
           release_type: booking.release_type,
           consignee: consigneeName,
@@ -1480,56 +1636,47 @@ export default function RoutingBookingChildPage() {
           issued_by_name: profile ? `${profile.nombre || ''} ${profile.apellido || ''}`.trim() : null,
         }
         return (
-          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                {bookingTitle}
-              </h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Shipping Instruction {routing.routing_number}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {contextualAction && (
+          <div className="mb-6">
+            <UnsavedChangesGuard dirty={isDirty} />
+            <FinancePageHeader
+              eyebrow="Operaciones · Booking"
+              icon={Ship}
+              title={<span className="flex flex-wrap items-center gap-3">{bookingTitle}<OperationStatusBadge status={operationalState.displayStatus} /></span>}
+              description={<>SI {routing.routing_number}{client?.nombre ? ` · ${client.nombre}` : ''}{booking.carrier ? ` · ${booking.carrier}` : ''}</>}
+              actions={<>
+                {isArrived && (
+                  <PdfDownloadButton
+                    document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
+                    fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
+                    className={financeActionClass}
+                  >
+                    {({ loading: pdfLoading }) => (
+                      <>
+                        <Download aria-hidden="true" className="h-4 w-4" />
+                        {pdfLoading ? 'Generando...' : 'Aviso de llegada'}
+                      </>
+                    )}
+                  </PdfDownloadButton>
+                )}
                 <button
                   type="button"
-                  onClick={() => void openBookingAction(contextualAction)}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  onClick={() => requestFormNavigation(() => router.push(returnHref))}
+                  className={financeActionClass}
                 >
-                  {contextualAction.label}
+                  <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+                  {returnHref.startsWith('/operations/dashboard')
+                    ? 'Volver al Control Tower'
+                    : 'Volver a la SI'}
                 </button>
-              )}
-              {isArrived && (
-                <PdfDownloadButton
-                  document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
-                  fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                >
-                  {({ loading: pdfLoading }) => (
-                    <>
-                      <Download className="h-4 w-4" />
-                      {pdfLoading ? 'Generando...' : 'Aviso de Llegada'}
-                    </>
-                  )}
-                </PdfDownloadButton>
-              )}
-              <button
-                type="button"
-                onClick={() => router.push(returnHref)}
-                className={secondaryButtonClass}
-              >
-                {returnHref.startsWith('/operations/dashboard')
-                  ? 'Volver al Control Tower'
-                  : 'Volver a SI'}
-              </button>
-            </div>
+              </>}
+            />
           </div>
         )
       })()}
 
       <div className="space-y-6">
         <DocumentationWorkspace
+          onAction={openBlFromHref}
           items={documentationItems}
           reference={bookingReference || routing.routing_number}
           operationalAction={
@@ -1546,8 +1693,8 @@ export default function RoutingBookingChildPage() {
         />
 
         <div id="booking-data" className="grid scroll-mt-24 gap-6 lg:grid-cols-2">
-          <SectionCard title="Referencia Operativa">
-            <Field label="Carrier / Naviera" readonlySource="referencia">
+          <SectionCard title="Referencia operativa">
+            <Field label="Naviera" readonlySource="referencia">
               <input value={booking.carrier || ''} readOnly className={readonlyFieldClass} />
             </Field>
 
@@ -1555,11 +1702,11 @@ export default function RoutingBookingChildPage() {
               <input value={incotermReference} readOnly className={readonlyFieldClass} />
             </Field>
 
-            <Field label="Transit Time" readonlySource="cotizacion">
+            <Field label="Tiempo de tránsito" readonlySource="cotizacion">
               <input value={selectedAgentTransit} readOnly className={readonlyFieldClass} />
             </Field>
 
-            <Field label="Booking Number">
+            <Field label="Número de booking">
               <input
                 value={booking.booking_number || ''}
                 readOnly
@@ -1567,7 +1714,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Carrier Booking">
+            <Field label="Referencia de la naviera">
               <input
                 value={booking.carrier_booking || ''}
                 readOnly
@@ -1588,7 +1735,7 @@ export default function RoutingBookingChildPage() {
             </Field>
           </SectionCard>
 
-          <SectionCard title="Documentacion">
+          <SectionCard title="Números de BL">
             <Field label="Master BL">
               <input
                 value={booking.master_bl || ''}
@@ -1607,8 +1754,8 @@ export default function RoutingBookingChildPage() {
           </SectionCard>
         </div>
 
-        <SectionCard title="BL / Routing" gridClassName="md:grid-cols-2 lg:grid-cols-4">
-          <Field label="Freight Terms">
+        <SectionCard title="Instrucciones de BL" gridClassName="md:grid-cols-2 lg:grid-cols-4">
+          <Field label="Términos de flete">
             <select
               value={booking.freight_terms || ''}
               onChange={(e) => setBooking({ ...booking, freight_terms: e.target.value })}
@@ -1620,7 +1767,7 @@ export default function RoutingBookingChildPage() {
             </select>
           </Field>
 
-          <Field label="Release Type">
+          <Field label="Tipo de liberación">
             <select
               value={booking.release_type || ''}
               onChange={(e) => setBooking({ ...booking, release_type: e.target.value })}
@@ -1632,7 +1779,7 @@ export default function RoutingBookingChildPage() {
             </select>
           </Field>
 
-          <Field label="HBL Freight Visibility">
+          <Field label="Flete en el HBL">
             <select
               value={booking.hbl_freight_visibility || ''}
               onChange={(e) =>
@@ -1660,7 +1807,7 @@ export default function RoutingBookingChildPage() {
               htmlFor="printed-at-destination"
               className="text-sm text-slate-700 dark:text-slate-300"
             >
-              Printed at Destination
+              BL impreso en destino
             </label>
           </div>
 
@@ -1674,11 +1821,11 @@ export default function RoutingBookingChildPage() {
             <input value={shipperName} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Shipper Contact" readonlySource="shipping">
+          <Field label="Contacto del shipper" readonlySource="shipping">
             <input value={shipperContact} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Shipper Email" readonlySource="shipping">
+          <Field label="Email del shipper" readonlySource="shipping">
             <input value={shipperEmail} readOnly className={readonlyFieldClass} />
           </Field>
 
@@ -1692,30 +1839,30 @@ export default function RoutingBookingChildPage() {
             <input value={consigneeName} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Tax ID" readonlySource="cotizacion">
+          <Field label="RTN del consignee" readonlySource="cotizacion">
             <input value={consigneeTaxId} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Address" readonlySource="cotizacion">
+          <Field label="Dirección del consignee" readonlySource="cotizacion">
             <input value={consigneeAddress} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Contact" readonlySource="cotizacion">
+          <Field label="Contacto del consignee" readonlySource="cotizacion">
             <input value={consigneeContact} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Email" readonlySource="cotizacion">
+          <Field label="Email del consignee" readonlySource="cotizacion">
             <input value={consigneeEmail} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Phone" readonlySource="cotizacion">
+          <Field label="Teléfono del consignee" readonlySource="cotizacion">
             <input value={consigneePhone} readOnly className={readonlyFieldClass} />
           </Field>
         </SectionCard>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Navegacion / Transito">
-            <Field label="Carrier">
+          <SectionCard title="Navegación y tránsito">
+            <Field label="Naviera">
               <input
                 value={booking.carrier || ''}
                 readOnly
@@ -1723,7 +1870,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Vessel Name">
+            <Field label="Buque">
               <input
                 value={booking.vessel_name || ''}
                 readOnly
@@ -1731,7 +1878,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Voyage">
+            <Field label="Viaje">
               <input
                 value={booking.voyage || ''}
                 readOnly
@@ -1739,7 +1886,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Estimated Transit Days">
+            <Field label="Días de tránsito estimados">
               <input
                 type="number"
                 value={booking.estimated_transit_days ?? ''}
@@ -1753,73 +1900,78 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Real Transit Days">
-              <input
-                type="number"
-                value={booking.real_transit_days ?? ''}
-                onChange={(e) =>
-                  setBooking({
-                    ...booking,
-                    real_transit_days: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                className={fieldClass}
-              />
-            </Field>
+            {computedTransitDays !== null ? (
+              <Field label="Días de tránsito reales" readonlySource="calculado">
+                <input
+                  value={computedTransitDays}
+                  readOnly
+                  title="Salida real → arribo real"
+                  className={cn(readonlyFieldClass, 'tabular-nums')}
+                />
+              </Field>
+            ) : (
+              <Field label="Días de tránsito reales">
+                <input
+                  type="number"
+                  value={booking.real_transit_days ?? ''}
+                  onChange={(e) =>
+                    setBooking({
+                      ...booking,
+                      real_transit_days: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className={fieldClass}
+                />
+              </Field>
+            )}
           </SectionCard>
 
-          <SectionCard title="Fechas Operativas">
-            <Field label="ETD">
+          <SectionCard title="Fechas operativas">
+            <Field label="ETD vigente">
               <input
-                type="date"
-                value={booking.etd || ''}
+                value={formatDate(booking.etd, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="ETA">
+            <Field label="ETA vigente">
               <input
-                type="date"
-                value={booking.eta || ''}
+                value={formatDate(booking.eta, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Original ETD">
+            <Field label="ETD original">
               <input
-                type="date"
-                value={booking.original_etd || ''}
+                value={formatDate(booking.original_etd, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Original ETA">
+            <Field label="ETA original">
               <input
-                type="date"
-                value={booking.original_eta || ''}
+                value={formatDate(booking.original_eta, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Actual ETD">
+            <Field label="Salida real">
               <input
-                type="date"
-                value={booking.actual_etd || ''}
+                value={formatDate(booking.actual_etd, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Actual ETA">
+            <Field label="Arribo real">
               <input
-                type="date"
-                value={booking.actual_eta || ''}
+                value={formatDate(booking.actual_eta, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
           </SectionCard>
@@ -1830,6 +1982,7 @@ export default function RoutingBookingChildPage() {
             booking={booking as ScheduleBooking}
             userRole={profile?.rol}
             onChanged={loadData}
+            onReferenceConfirmed={confirmAfterReference}
             onReplaced={(newBookingId) =>
               router.push(
                 `/operations/shipping-instructions/${id}/bookings/${newBookingId}`
@@ -1852,7 +2005,7 @@ export default function RoutingBookingChildPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Contenedores asignados a este booking
+                Contenedores del booking
               </h2>
               <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
                 <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
@@ -1885,7 +2038,7 @@ export default function RoutingBookingChildPage() {
             <button
               type="button"
               onClick={addContainerRow}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Agregar contenedor
             </button>
@@ -1970,16 +2123,11 @@ export default function RoutingBookingChildPage() {
             </table>
           </div>
 
-          <div className="mt-5 flex justify-end">
-            <button
-              type="button"
-              onClick={saveBookingContainers}
-              disabled={savingContainers}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {savingContainers ? 'Guardando...' : 'Guardar contenedores'}
-            </button>
-          </div>
+          {containersDirty && (
+            <p className="mt-4 text-xs font-medium text-amber-700 dark:text-amber-300">
+              Los cambios en contenedores se guardan con “Guardar cambios” en la barra inferior.
+            </p>
+          )}
         </section>
 
         <section className={cardClass}>
@@ -1989,7 +2137,7 @@ export default function RoutingBookingChildPage() {
                 Documentos
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Bucket esperado en Supabase Storage: {BOOKING_DOCUMENT_BUCKET}
+                Adjunta la confirmación de booking, BL, facturas y demás soportes.
               </p>
             </div>
           </div>
@@ -2034,9 +2182,9 @@ export default function RoutingBookingChildPage() {
                 <button
                   type="submit"
                   disabled={uploadingDocument}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <Upload className="h-4 w-4" />
+                  <Upload aria-hidden="true" className="h-4 w-4" />
                   {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
                 </button>
               </div>
@@ -2127,8 +2275,8 @@ export default function RoutingBookingChildPage() {
         </section>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Tracking y Control">
-            <Field label="Tracking URL">
+          <SectionCard title="Seguimiento y días libres">
+            <Field label="Enlace de seguimiento">
               <input
                 value={booking.tracking_url || ''}
                 onChange={(e) => setBooking({ ...booking, tracking_url: e.target.value })}
@@ -2136,7 +2284,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Free Days">
+            <Field label="Días libres">
               <input
                 type="number"
                 value={booking.free_days ?? ''}
@@ -2150,19 +2298,35 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Remaining Free Days">
-              <input
-                type="number"
-                value={booking.remaining_free_days ?? ''}
-                onChange={(e) =>
-                  setBooking({
-                    ...booking,
-                    remaining_free_days: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                className={fieldClass}
-              />
-            </Field>
+            {freeDaysComputed ? (
+              <Field label="Días libres restantes" readonlySource="calculado">
+                <input
+                  value={remainingFreeDaysValue ?? ''}
+                  readOnly
+                  title={lastFreeDayDate ? `Último día libre: ${formatDate(lastFreeDayDate)}` : undefined}
+                  className={cn(readonlyFieldClass, 'tabular-nums', (remainingFreeDaysValue ?? 1) <= 0 && 'text-red-700 dark:text-red-300')}
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {(remainingFreeDaysValue ?? 1) <= 0
+                    ? `En demora desde el ${formatDate(lastFreeDayDate ? new Date(lastFreeDayDate.getTime() + 86_400_000) : null)}`
+                    : `Último día libre: ${formatDate(lastFreeDayDate)} (el día de arribo cuenta como día 1)`}
+                </p>
+              </Field>
+            ) : (
+              <Field label="Días libres restantes">
+                <input
+                  type="number"
+                  value={booking.remaining_free_days ?? ''}
+                  onChange={(e) =>
+                    setBooking({
+                      ...booking,
+                      remaining_free_days: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className={fieldClass}
+                />
+              </Field>
+            )}
           </SectionCard>
 
           <section className={cardClass}>
@@ -2181,16 +2345,6 @@ export default function RoutingBookingChildPage() {
         </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <button
-          type="button"
-          onClick={saveBooking}
-          disabled={saving}
-          className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? 'Guardando...' : 'Guardar Booking'}
-        </button>
-      </div>
 
       <div className="mt-6">
         <BookingTimeline
@@ -2205,17 +2359,15 @@ export default function RoutingBookingChildPage() {
       <section id="booking-bills" className={`${cardClass} mt-6 scroll-mt-24`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Bills of Lading
+            Bills of Lading (BL)
           </h2>
           {hasBookingReference && (
             <button
               type="button"
               onClick={() =>
-                router.push(
-                  `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=MBL`
-                )
+                openBlPanel('new', 'MBL')
               }
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className={operationSecondaryButtonClass}
             >
               + Crear MBL
             </button>
@@ -2262,9 +2414,7 @@ export default function RoutingBookingChildPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              router.push(
-                                `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=HBL&parentBlId=${mbl.id}`
-                              )
+                              openBlPanel('new', 'HBL', mbl.id)
                             }
                             className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
                           >
@@ -2274,9 +2424,7 @@ export default function RoutingBookingChildPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            router.push(
-                              `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${mbl.id}`
-                            )
+                            openBlPanel(mbl.id)
                           }
                           className={secondaryButtonClass}
                         >
@@ -2308,9 +2456,7 @@ export default function RoutingBookingChildPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                router.push(
-                                  `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${hbl.id}`
-                                )
+                                openBlPanel(hbl.id)
                               }
                               className={secondaryButtonClass}
                             >
@@ -2327,6 +2473,56 @@ export default function RoutingBookingChildPage() {
         )}
       </section>
 
+      <SidePanel
+        open={Boolean(blPanelId)}
+        onClose={closeBlPanel}
+        eyebrow={`Operaciones · Booking ${bookingReference || ''}`.trim()}
+        title={blPanelId === 'new'
+          ? `Nuevo ${blPanelType === 'HBL' ? houseDocumentLabel : 'MBL'}`
+          : (() => {
+              const bill = billsOfLading.find((item) => item.id === blPanelId)
+              return bill ? `${bill.bl_type === 'HBL' ? houseDocumentLabel : 'MBL'} · ${bill.bl_number || 'Sin número'}` : 'Bill of Lading'
+            })()}
+        description={`SI ${routing.routing_number}${client?.nombre ? ` · ${client.nombre}` : ''}`}
+        actions={blPanelId && blPanelId !== 'new' ? (
+          <a href={blPageHref(blPanelId)} className={financeActionClass}>Abrir en página</a>
+        ) : undefined}
+      >
+        {blPanelId && (
+          <BillOfLadingEditor
+            key={blPanelId}
+            embedded
+            shippingInstructionId={id}
+            bookingId={bookingId}
+            blId={blPanelId}
+            type={blPanelType}
+            parentBlId={blPanelParent}
+            onClose={closeBlPanel}
+            onCreated={(newBlId) => setBlPanelUrl('replace', newBlId)}
+            onChanged={() => void refreshAfterBlChange()}
+          />
+        )}
+      </SidePanel>
+
+      <OperationSaveBar
+        dirty={isDirty}
+        saving={saving || savingContainers}
+        onSave={() => void saveAllChanges()}
+      >
+        {contextualAction && (
+          <button
+            type="button"
+            onClick={() => void openBookingAction(contextualAction)}
+            disabled={saving || savingContainers}
+            title={contextualAction.description}
+            className={operationPrimaryButtonClass}
+          >
+            <Package aria-hidden="true" className="h-4 w-4" />
+            {contextualAction.label}
+          </button>
+        )}
+      </OperationSaveBar>
+
       <Dialog
         open={Boolean(pendingAction)}
         onOpenChange={(open) => {
@@ -2336,7 +2532,7 @@ export default function RoutingBookingChildPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <OperationDialogContent icon={Package} tone="sky" eyebrow={`Booking ${bookingReference || routing.routing_number}`}>
           <DialogHeader>
             <DialogTitle>{pendingAction?.label}</DialogTitle>
             <DialogDescription>
@@ -2344,10 +2540,7 @@ export default function RoutingBookingChildPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {pendingAction?.kind === 'transition' &&
-            ['Listo para Embarque', 'Embarcado'].includes(
-              pendingAction.targetStatus || ''
-            ) && (
+          {pendingAction?.step === 'departure' && (
               <div
                 className={`rounded-xl border p-3 text-sm ${
                   (actionReadiness || readinessEvaluation)?.ready
@@ -2419,7 +2612,7 @@ export default function RoutingBookingChildPage() {
               type="button"
               onClick={() => setPendingAction(null)}
               disabled={runningAction}
-              className={secondaryButtonClass}
+              className={operationSecondaryButtonClass}
             >
               Cancelar
             </button>
@@ -2427,12 +2620,12 @@ export default function RoutingBookingChildPage() {
               type="button"
               onClick={runBookingAction}
               disabled={runningAction}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className={operationPrimaryButtonClass}
             >
               {runningAction ? 'Procesando...' : pendingAction?.label}
             </button>
           </DialogFooter>
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
       <ConfirmDialog
         open={containerPendingRemoval !== null}
@@ -2457,7 +2650,7 @@ export default function RoutingBookingChildPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <OperationDialogContent size="sm" icon={Trash2} tone="red" eyebrow="Documentos del booking">
           <DialogHeader>
             <DialogTitle>Eliminar documento</DialogTitle>
             <DialogDescription>
@@ -2477,12 +2670,12 @@ export default function RoutingBookingChildPage() {
                 </p>
               </div>
 
-              <div className="flex justify-end gap-3">
+              <DialogFooter>
                 <button
                   type="button"
                   onClick={() => setDocumentPendingDelete(null)}
                   disabled={Boolean(deletingDocumentId)}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className={operationSecondaryButtonClass}
                 >
                   Cancelar
                 </button>
@@ -2491,16 +2684,16 @@ export default function RoutingBookingChildPage() {
                   type="button"
                   onClick={() => deleteBookingDocument(documentPendingDelete)}
                   disabled={Boolean(deletingDocumentId)}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                  className={operationDangerSolidButtonClass}
                 >
                   {deletingDocumentId
                     ? 'Eliminando...'
                     : 'Eliminar documento'}
                 </button>
-              </div>
+              </DialogFooter>
             </div>
           )}
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
     </div>
   )

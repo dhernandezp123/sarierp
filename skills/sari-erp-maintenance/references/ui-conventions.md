@@ -94,6 +94,15 @@ que llenen la pagina. Dimensiona por el dato esperado: codigos y correlativos co
 para nombres y cuentas padre con codigo y descripcion. Son referencias visuales,
 no nuevos limites de caracteres ni cambios de validacion de negocio.
 
+Campos numericos: no deben expandirse por pertenecer a una grilla de columnas
+iguales. En escritorio, cantidad y tasa usan aproximadamente 7-8 rem (112-128 px);
+costo unitario, descuento y tipo de cambio, 10-12 rem (160-192 px). Usa
+`fieldClassSm` (40 px de alto) y limita el contenedor con `sm:w-28` / `sm:w-40`,
+sin `flex-grow`. Combina controles cortos en una fila `flex-wrap`; reserva
+`minmax(0,1fr)` para descripcion y cuenta contable. En movil se permite el ancho
+disponible para facilitar la captura, sin desbordamientos. Verifica el ancho
+real de cantidad y montos en navegador, no solo la ausencia de overflow.
+
 En Cuentas, aprovecha el ancho del contenedor para colocar Codigo, Nombre,
 Naturaleza, Nivel y Cuenta padre en una sola fila en escritorio, conservando
 anchos cortos para los datos cortos y flexibles para nombre/padre. Evita limitar
@@ -124,3 +133,25 @@ móvil usa emulación de dispositivo, no `--window-size`.
 - Los asientos solo usan cuentas marcadas para movimiento. En Sari, el propietario
   confirmó solo las Auxiliar; no habilites otras hojas sin su confirmación.
 - Cada moneda se totaliza por separado; no sumes HNL y USD en una sola cifra.
+
+### Estándar técnico de campos financieros
+
+En Finanzas, Contabilidad, Facturación, Proveedores y CAI, los valores numéricos
+usan `FinanceNumberInput` con `numericKind` obligatorio. Cantidad, porcentaje y
+entero: 112 px; importe y cambio: 160 px; alto: 40 px. En móvil se adaptan al
+contenedor. No pasar `className`, `style`, `size` ni spreads al control.
+Agrupar filas mixtas con `finance-field-row`; las descripciones y cuentas se
+expanden y los números conservan su ancho. No distribuir números en columnas
+iguales. Las plantillas de tabla con columnas explícitas pueden conservarse.
+Los selectores cortos dentro de FormField usan `financeSize="quantity"` (ISV)
+o `financeSize="choice"` (tratamiento fiscal), para que tampoco se estiren.
+
+Correlativos con ceros iniciales usan `FinanceNumericCodeInput` (192 px);
+importes de documentos importados con comas usan `FinanceMoneyTextInput`.
+El importe principal del recibo puede usar `presentation="featured"` únicamente
+con `presentationReason` literal que justifique la excepción.
+
+`npm run check:finance-ui` analiza todas las rutas y componentes financieros,
+rechaza controles numéricos genéricos, HTML directo y overrides de geometría.
+Se ejecuta en CI y antes de cada build, sin lista de excepciones históricas.
+El componente mantiene la edición decimal y protección de rueda de NumberInput.

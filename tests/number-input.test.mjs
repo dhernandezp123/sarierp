@@ -2,6 +2,21 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {mountPage} from './page-harness.mjs'
 
+test('la rueda libera el foco sin cambiar el importe ni cancelar el scroll de pagina',()=>{
+ const f=mountNumeric('2365.80',value=>value)
+ try {
+  let blurs=0,forwarded=0
+  const control={ownerDocument:{activeElement:null},blur(){blurs++}}
+  const event={currentTarget:control,preventDefault(){assert.fail('debe permitir scroll')}}
+  f.props.onWheel=received=>{assert.equal(received,event);forwarded++};f.app.render()
+  f.input().props.onWheel(event);assert.equal(blurs,0)
+  control.ownerDocument.activeElement=control
+  f.input().props.onWheel(event)
+  assert.equal(blurs,1);assert.equal(forwarded,2)
+  assert.equal(f.input().props.value,'2365.80');assert.deepEqual(f.events,[])
+ }finally{f.app.cleanup()}
+})
+
 function mountNumeric(initial,normalize=value=>Number(value)) {
  const events=[],props={value:initial,min:0,step:0.0001,'aria-label':'Importe',onChange:event=>{events.push(event.target.value);props.value=normalize(event.target.value)}}
  const app=mountPage('src/components/ui/NumberInput.tsx',{}, {exported:'NumberInput',props})

@@ -44,3 +44,27 @@ export function getClientRateChanges(before: ClientRateSnapshot | null, after: C
     return [{ field, label, before: display(before, field), after: display(after, field) }]
   })
 }
+
+export type ClientRateBatch = {
+  event_id: string
+  changed_at: string
+  actor_id: string | null
+  actor_name: string
+  changes: Pick<ClientRateEvent, 'event_id' | 'rate_code' | 'destination' | 'before_values' | 'after_values'>[]
+  total_count: number | string
+}
+
+export function getClientRateBatchSummary(batch: ClientRateBatch) {
+  const added = batch.changes.filter(event => !event.before_values && event.after_values)
+  const removed = batch.changes.filter(event => event.before_values && !event.after_values)
+  const modified = batch.changes.length - added.length - removed.length
+  const parts: string[] = []
+  if (added.length) {
+    const zero = added.filter(event => event.after_values?.amount != null && Number(event.after_values.amount) === 0).length
+    const withAmount = added.filter(event => event.after_values?.amount != null && Number(event.after_values.amount) !== 0).length
+    parts.push(`${added.length} ${added.length === 1 ? 'alta' : 'altas'} (${withAmount} con importe, ${zero} en cero)`)
+  }
+  if (modified) parts.push(`${modified} ${modified === 1 ? 'tarifa modificada' : 'tarifas modificadas'}`)
+  if (removed.length) parts.push(`${removed.length} ${removed.length === 1 ? 'baja' : 'bajas'}`)
+  return parts.join(' · ')
+}

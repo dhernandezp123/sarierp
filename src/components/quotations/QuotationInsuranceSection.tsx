@@ -1,6 +1,8 @@
 'use client'
 
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
+import { FormField } from '@/src/components/ui/form-field'
+import { NumberInput } from '@/src/components/ui/NumberInput'
 import type { withMiamiInsurance } from '@/src/lib/miami-insurance'
 import type { QuotationFieldChange, QuotationFormData } from '@/src/lib/quotation-form'
 
@@ -53,11 +55,8 @@ export function QuotationInsuranceSection({
       </label>
 
       {requiresCargoInsurance && (
-        <div className="mt-4 flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Valor comercial / Valor FOB (USD)
-          </label>
-          <input
+        <FormField label="Valor comercial / Valor FOB (USD)" className="mt-4 w-full max-w-60">
+          <NumberInput
             name="commercial_value"
             type="number"
             min="0"
@@ -67,7 +66,7 @@ export function QuotationInsuranceSection({
             onChange={handleChange}
             className={fieldClass}
           />
-        </div>
+        </FormField>
       )}
       {isMiamiFlow && requiresCargoInsurance && (
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">

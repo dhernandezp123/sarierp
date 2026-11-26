@@ -21,7 +21,8 @@ test('role ordering preserves all groups and does not expand route permissions',
   for (const [role, first] of [['Admin', 'commercial'], ['Ventas', 'commercial'], ['Pricing', 'pricing'], ['Operaciones', 'operations'], ['Finanzas', 'finance'], ['Contabilidad', 'finance']]) {
     const groups = sidebarGroupOrder(role)
     assert.equal(groups[0], first)
-    assert.equal(new Set(groups).size, 6)
+    assert.equal(new Set(groups).size, 7)
+    assert.ok(groups.includes('hr'))
   }
   assert.equal(canAccessPath('Finanzas', '/quotations/new'), false)
   assert.equal(canAccessPath('Ventas', '/pricing-comparison'), false)

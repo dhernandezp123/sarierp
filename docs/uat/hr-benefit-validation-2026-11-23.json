@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-23",
+  "branch": "feat/hr-benefit-calculations-20261123",
+  "baseCommit": "be4bfdc47d090ff8c8c5ba8f12d77bb122095085",
+  "scope": "HR-10 automatic vacation and settlement calculation",
+  "fixtures": "Synthetic users, tenants and compensation only; no business rows or documents copied",
+  "checks": {
+    "typescript": "passed",
+    "focusedEslint": "passed",
+    "financeUi": "passed",
+    "nodeTests": { "passed": 693, "failed": 0 },
+    "build": "Next 16.2.6 production build with loopback-only UAT configuration passed",
+    "ocrPostbuild": "passed",
+    "sqlRollbackSuites": ["hr_automatic_benefits", "hr_payroll", "hr_vacation_periods", "hr_employees_and_leave", "hr_activity_and_calendar", "hr_certificates_and_documents", "hr_email_outbox", "purchase_requests_and_orders"],
+    "realLocalAuthAndPostgrest": [
+      "Employee, foreign tenant, client, inactive and pending cannot calculate",
+      "Concurrent identical create requests return the same payroll run",
+      "Own draft calculation hidden by RLS",
+      "Own approved payslip links its calculation",
+      "Concurrent posting returns the same journal"
+    ],
+    "browser": [
+      "Real ERP login and monthly evidence entry",
+      "Server preview and accounting concept mapping",
+      "Response lost after commit then retry without duplicate",
+      "Private detailed PDF generated from frozen snapshot",
+      "Employee approved own PDF accessible; reversed PDF returns 404",
+      "Employee redirected from Administration calculator",
+      "No horizontal overflow at 1280, 768 and 390 pixels",
+      "No JavaScript exceptions"
+    ],
+    "finalPdf": { "pages": 3, "ordinaryBases": true, "vacationPeriods": true, "fingerprint": true, "renderedFirstPageReviewed": true, "cacheControl": "private, no-store" }
+  },
+  "limits": [
+    "No Production migration or deployment performed",
+    "No real payroll case certified",
+    "Trial not run",
+    "General time-based regime requires documented confirmation; special regimes require specific review",
+    "No bank transfer or automatic statutory payroll deductions",
+    "Next output contains local UAT configuration and must be rebuilt for destination"
+  ],
+  "cleanup": "Disposable services, database and temporary credentials removed after verification"
+}

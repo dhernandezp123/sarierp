@@ -4,7 +4,28 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { CustomsServicePanel } from '@/src/components/operations/CustomsServicePanel'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { Download, ExternalLink, Plus, Printer, RefreshCw } from 'lucide-react'
+import {
+  ArrowRight,
+  Ban,
+  Building2,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  Download,
+  ExternalLink,
+  FileText,
+  Info as InfoIcon,
+  Lock,
+  MessageSquareText,
+  Plus,
+  Printer,
+  RefreshCw,
+  Send,
+  Ship,
+  ShieldCheck,
+  UserCheck,
+  type LucideIcon,
+} from 'lucide-react'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
@@ -16,7 +37,24 @@ import {
   loadShipmentContext,
   type ShipmentContext,
 } from '@/src/lib/shipment-service'
-import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cn } from '@/src/lib/utils'
+import { FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
+import { CostNotice } from '@/src/components/pricing/CostStatus'
+import {
+  OperationSaveBar,
+  OperationSectionTitle,
+  OperationStatusBadge,
+  OperationStepper,
+  operationDangerButtonClass,
+  operationDangerSolidButtonClass,
+  operationPrimaryButtonClass,
+  operationSecondaryButtonClass,
+  operationStatusPresentation,
+  type OperationStep,
+} from '@/src/components/operations/OperationsWorkspace'
+import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { resolveShippingInstructionStatus } from '@/src/lib/operation-status'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { SectionNav } from '@/src/components/ui/SectionNav'
@@ -28,16 +66,18 @@ import {
 } from '@/src/lib/company-branding'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { OperationDialogContent } from '@/src/components/operations/OperationDialog'
 import { formatDate } from '@/src/lib/format'
 import { operationsReturnHref } from '@/src/lib/operations-navigation'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import {
   getShippingInstructionClient,
+  getShippingInstructionHandoffAccess,
   mergeShippingInstructionMutation,
 } from '@/src/lib/shipping-instruction-state'
 
@@ -81,7 +121,6 @@ type OperationalTimelineEvent = {
 }
 
 const SI_READY_FOR_BOOKING = 'Listo para Booking'
-const SI_PENDING_VALIDATION = 'Pendiente Validación'
 const SI_VALIDATED = 'Validada'
 const SI_CANCELLED = 'Cancelada'
 
@@ -99,8 +138,7 @@ const shippingInstructionSections = [
   { href: '#si-overview' as const, label: 'Resumen' },
   { href: '#si-bookings' as const, label: 'Bookings' },
   { href: '#si-information' as const, label: 'Información' },
-  { href: '#si-actions' as const, label: 'Acciones' },
-  { href: '#si-timeline' as const, label: 'Timeline' },
+  { href: '#si-timeline' as const, label: 'Historial' },
 ]
 
 type ShippingInstruction = {
@@ -205,12 +243,45 @@ const salesInitialInfoFields: SalesInitialInfoField[] = [
   'special_instructions',
 ]
 
+// Campos que el usuario puede editar en esta pantalla; definen "cambios sin guardar".
+const editableRoutingFields = [
+  'supplier_name', 'supplier_contact', 'supplier_email', 'supplier_phone',
+  'supplier_address', 'freight_terms', 'release_type', 'hbl_freight_visibility',
+  'printed_at_destination', 'insurance_requested', 'sales_observations',
+  'special_instructions',
+] as const
+
+function routingSnapshot(routing: object | null) {
+  if (!routing) return ''
+  const values = routing as Record<string, unknown>
+  return JSON.stringify(editableRoutingFields.map((field) => values[field] ?? null))
+}
+
+type RoutingPrimaryAction = {
+  kind: 'submit' | 'accept' | 'validate' | 'finalize' | 'booking'
+  label: string
+  icon: LucideIcon
+  disabled: boolean
+  title?: string
+}
+
+// Mismos campos que exige validate_shipping_instruction.
+function hasCompleteSupplier(routing: {
+  supplier_name?: string | null
+  supplier_contact?: string | null
+  supplier_email?: string | null
+  supplier_address?: string | null
+}) {
+  return [routing.supplier_name, routing.supplier_contact, routing.supplier_email, routing.supplier_address]
+    .every((value) => Boolean(value?.trim()))
+}
+
 function Info({ label, value }: { label: string; value?: string | number | null }) {
   return (
     <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
       <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-        {value || 'N/A'}
+        {value || '—'}
       </p>
     </div>
   )
@@ -276,29 +347,6 @@ function formatBookingContainers(
   if (values.length === 0) return 'Sin asignar'
 
   return values.map((container) => `${container.quantity} x ${container.label}`).join(', ')
-}
-
-function getBookingStatusBadgeClass(status?: string | null) {
-  switch (status) {
-    case 'Finalizado':
-      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-    case 'Arribado':
-      return 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
-    case 'En Tránsito':
-      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
-    case 'Embarcado':
-      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-    case 'Booking Confirmado':
-      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
-    case 'Booking Solicitado':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-    case 'Documentación Pendiente':
-      return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
-    case 'Listo para Embarque':
-      return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
-    default:
-      return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-  }
 }
 
 function parseQuotedContainerTotal(routing: ShippingInstruction) {
@@ -447,6 +495,7 @@ export default function RoutingDetailPage() {
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [savedSnapshot, setSavedSnapshot] = useState('')
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
 
@@ -460,11 +509,8 @@ export default function RoutingDetailPage() {
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
   const canViewRouting =
     !!routing && (canManageRouting || routing.created_by === user?.id)
-  const canSalesEditInitialInfo =
-    profile?.rol === 'Ventas' &&
-    routing?.created_by === user?.id &&
-    !routing?.sales_submitted_at &&
-    routing?.operational_status === SI_PENDING_VALIDATION
+  const { canSubmit: canSalesEditInitialInfo, canAccept: canAcceptHandoff } =
+    getShippingInstructionHandoffAccess(profile?.rol, user?.id, routing)
   const visibleOperationalEvents = isTimelineExpanded
     ? operationalEvents
     : operationalEvents.slice(0, 3)
@@ -482,14 +528,11 @@ export default function RoutingDetailPage() {
     ? `${assignedOperationsUser.nombre || ''} ${assignedOperationsUser.apellido || ''}`.trim()
       || assignedOperationsUser.email
       || 'Operativo asignado'
-    : routing?.operations_assigned_to
+    : routing?.operations_assigned_to === user?.id && profile?.rol === 'Admin'
+      ? 'Administrador (tú)'
+      : routing?.operations_assigned_to
       ? 'Operativo asignado'
       : 'Sin asignar'
-  const canAcceptHandoff =
-    profile?.rol === 'Operaciones' &&
-    Boolean(routing?.sales_submitted_at) &&
-    !routing?.operations_accepted_at &&
-    (!routing?.operations_assigned_to || routing.operations_assigned_to === user?.id)
 
   const loadRouting = async () => {
     // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
@@ -558,9 +601,18 @@ export default function RoutingDetailPage() {
       }
 
       setRouting(data)
+      setSavedSnapshot(routingSnapshot(data))
     }
 
     setLoading(false)
+    return !error && data ? (data as ShippingInstruction) : null
+  }
+
+  // Aplica la fila devuelta por una RPC y marca sus valores como guardados.
+  const applyRoutingMutation = (updated: ShippingInstruction) => {
+    setRouting((current) => mergeShippingInstructionMutation(current, updated))
+    setSavedSnapshot(routingSnapshot(updated))
+    return mergeShippingInstructionMutation(routing, updated)
   }
 
   const syncRoutingFromPricing = async () => {
@@ -778,7 +830,7 @@ export default function RoutingDetailPage() {
     }
   }
 
-  const saveRouting = async () => {
+  const saveRouting = async (): Promise<ShippingInstruction | null | undefined> => {
     if (!routing) return
     if (!canManageRouting) {
       toast.error('No tienes permisos para editar esta Shipping Instruction')
@@ -846,18 +898,15 @@ export default function RoutingDetailPage() {
       shipping_instruction?: ShippingInstruction
     } | null
 
-    if (result?.shipping_instruction) {
-      setRouting((current) =>
-        mergeShippingInstructionMutation(current, result.shipping_instruction!)
-      )
-    } else {
-      await loadRouting()
-    }
+    const updated = result?.shipping_instruction
+      ? applyRoutingMutation(result.shipping_instruction)
+      : await loadRouting()
 
-    toast.success('Shipping Instructions actualizadas')
+    toast.success('Cambios guardados')
+    return updated
   }
 
-  const saveSalesInitialInfo = async (submitToOperations = false) => {
+  const saveSalesInitialInfo = async (submitToOperations = false): Promise<ShippingInstruction | null | undefined> => {
     if (!routing) return
     if (!canSalesEditInitialInfo) {
       toast.error('No tienes permisos para editar esta información')
@@ -899,21 +948,19 @@ export default function RoutingDetailPage() {
       shipping_instruction?: ShippingInstruction
     } | null
 
-    if (result?.shipping_instruction) {
-      setRouting((current) =>
-        mergeShippingInstructionMutation(current, result.shipping_instruction!)
-      )
-    } else {
-      await loadRouting()
-    }
+    const updated = result?.shipping_instruction
+      ? applyRoutingMutation(result.shipping_instruction)
+      : await loadRouting()
     toast.success(
       submitToOperations
         ? 'Información enviada a Operaciones'
         : 'Información inicial guardada'
     )
+    return updated
   }
 
-  const validateRouting = async () => {
+  const validateRouting = async (target: ShippingInstruction | null = routing) => {
+    const routing = target
     if (!routing) return
     if (!canManageRouting) {
       toast.error('No tienes permisos para validar esta Shipping Instruction')
@@ -924,16 +971,7 @@ export default function RoutingDetailPage() {
       return
     }
 
-    const requiredFields = [
-      routing.supplier_name,
-      routing.supplier_contact,
-      routing.supplier_email,
-      routing.supplier_address,
-    ]
-
-    const hasMissingFields = requiredFields.some(
-      (field) => !field || field === ''
-    )
+    const hasMissingFields = !hasCompleteSupplier(routing)
 
     if (hasMissingFields) {
       toast.error('Completa los datos obligatorios antes de validar.')
@@ -977,9 +1015,7 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) =>
-        mergeShippingInstructionMutation(current, result.shipping_instruction!)
-      )
+      applyRoutingMutation(result.shipping_instruction!)
     } else {
       await loadRouting()
     }
@@ -987,8 +1023,12 @@ export default function RoutingDetailPage() {
     toast.success('Shipping Instructions listas para booking')
   }
 
-  const acceptOperationsHandoff = async () => {
-    if (!routing || !canAcceptHandoff) return
+  const acceptOperationsHandoff = async (
+    target: ShippingInstruction | null = routing,
+    { quiet = false }: { quiet?: boolean } = {}
+  ): Promise<ShippingInstruction | null> => {
+    const routing = target
+    if (!routing || !canAcceptHandoff) return null
 
     setAccepting(true)
     const { data, error } = await supabase.rpc(
@@ -1006,25 +1046,31 @@ export default function RoutingDetailPage() {
           ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de aceptar.'
           : error.message || 'No se pudo aceptar el expediente'
       )
-      return
+      return null
     }
 
     const result = data as {
       shipping_instruction?: ShippingInstruction
     } | null
 
-    if (result?.shipping_instruction) {
-      setRouting((current) =>
-        mergeShippingInstructionMutation(current, result.shipping_instruction!)
-      )
-    } else {
-      await loadRouting()
-    }
+    const accepted = result?.shipping_instruction
+      ? applyRoutingMutation(result.shipping_instruction)
+      : await loadRouting()
     await loadOperationalTimeline(routing, bookings)
-    toast.success('Expediente aceptado; ahora puedes validarlo')
+    if (!quiet) toast.success('Expediente aceptado; ahora puedes validarlo')
+    return accepted
   }
 
-  const assignOperationsUser = async (userId: string) => {
+  // Aceptar y validar en un solo paso cuando el proveedor ya está completo; si
+  // la validación falla, el expediente queda aceptado y se valida después.
+  const acceptAndValidate = async (current: ShippingInstruction) => {
+    const ready = hasCompleteSupplier(current)
+    const accepted = await acceptOperationsHandoff(current, { quiet: ready })
+    if (accepted && ready) await validateRouting(accepted)
+  }
+
+  const assignOperationsUser = async (userId: string, target: ShippingInstruction | null = routing) => {
+    const routing = target
     if (!routing) return
 
     if (!canManageRouting) {
@@ -1065,9 +1111,7 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) =>
-        mergeShippingInstructionMutation(current, result.shipping_instruction!)
-      )
+      applyRoutingMutation(result.shipping_instruction!)
     } else {
       await loadRouting()
     }
@@ -1075,7 +1119,8 @@ export default function RoutingDetailPage() {
     toast.success('Operativo asignado')
   }
 
-  const finalizeRouting = async () => {
+  const finalizeRouting = async (target: ShippingInstruction | null = routing) => {
+    const routing = target
     if (!routing) return
     if (!canManageRouting) {
       toast.error('No tienes permisos para finalizar esta Shipping Instruction')
@@ -1116,9 +1161,7 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) =>
-        mergeShippingInstructionMutation(current, result.shipping_instruction!)
-      )
+      applyRoutingMutation(result.shipping_instruction!)
     } else {
       await loadRouting()
     }
@@ -1183,9 +1226,7 @@ export default function RoutingDetailPage() {
     const updatedRouting = result?.shipping_instruction || routing
 
     if (result?.shipping_instruction) {
-      setRouting((current) =>
-        mergeShippingInstructionMutation(current, result.shipping_instruction!)
-      )
+      applyRoutingMutation(result.shipping_instruction!)
     } else {
       await loadRouting()
     }
@@ -1332,7 +1373,7 @@ export default function RoutingDetailPage() {
   if (routing.quotation?.service_product === 'customs_only') {
     return <CustomsServicePanel key={routing.id} id={routing.id} number={routing.routing_number}
       status={routing.operational_status || 'Pendiente Validación'} updatedAt={routing.updated_at}
-      quotation={routing.quotation} canManage={canManageRouting} reload={loadRouting} />
+      quotation={routing.quotation} canManage={canManageRouting} reload={async () => { await loadRouting() }} />
   }
 
   const inputClassName =
@@ -1419,17 +1460,108 @@ export default function RoutingDetailPage() {
   const canDownloadRoutingPdf =
     canManageRouting || (profile?.rol === 'Ventas' && routing.created_by === user?.id)
   const routingPdfFileName = `SI-${routing.routing_number || 'shipping-instruction'}.pdf`
-  const aggregateBookingStatus = deriveBookingAggregateStatus(
-    bookings,
-    routing.operational_status || 'Sin bookings'
-  )
+  const aggregateBookingStatus = deriveBookingAggregateStatus(bookings, 'Sin bookings')
   const assignedContainerTotal = countAssignedBookingContainers(bookings)
   const containerAssignmentSummary =
     quotedContainerTotal > 0
       ? `${assignedContainerTotal} / ${quotedContainerTotal}`
       : `${assignedContainerTotal} / N/A`
+  const canSave = canManageRouting ? !isRoutingCancelled && !isRoutingFinalized : canSalesEditInitialInfo
+  const isDirty = canSave && Boolean(savedSnapshot) && routingSnapshot(routing) !== savedSnapshot
+  // Las acciones del servidor leen la fila guardada: se guarda primero lo editado.
+  const runWithSavedRouting = async (action: (current: ShippingInstruction) => Promise<unknown>) => {
+    let current: ShippingInstruction | null | undefined = routing
+    if (isDirty) {
+      current = await (canManageRouting ? saveRouting() : saveSalesInitialInfo(false))
+      if (!current) return
+    }
+    await action(current)
+  }
+  const clientName = getShippingInstructionClient(routing)?.nombre || routing.client_name || 'Sin cliente'
+  const originLabel = routing.quotation?.puerto_origen || routing.origin_address || 'Origen sin definir'
+  const destinationLabel = routing.quotation?.puerto_destino || routing.destination_address || 'Destino sin definir'
+  const displayStatus = isRoutingCancelled
+    ? 'Cancelada'
+    : isRoutingFinalized
+      ? 'Finalizado'
+      : shipmentContext?.shipment.derived_operational_status ||
+        resolveShippingInstructionStatus(routing)
+  const isValidated = Boolean(routing.validated_at) ||
+    [SI_READY_FOR_BOOKING, 'En Booking'].includes(routing.operational_status || '') ||
+    routing.shipment_status === SI_VALIDATED || bookings.length > 0 || isRoutingFinalized
+  const bookingConfirmedStatuses = ['Booking Confirmado', 'Documentación Pendiente', 'Listo para Embarque', 'Embarcado', 'En Tránsito', 'Arribo Parcial', 'Arribado', 'Finalizado']
+  const departedStatuses = ['Embarcado', 'En Tránsito', 'Arribo Parcial', 'Arribado', 'Finalizado']
+  const arrivedStatuses = ['Arribado', 'Finalizado']
+  const allBookingsClosed = bookings.length > 0 && aggregateBookingStatus === 'Finalizado'
+  const stepDone = [
+    Boolean(routing.sales_submitted_at) || Boolean(routing.operations_accepted_at) || isValidated,
+    Boolean(routing.operations_accepted_at) || isValidated,
+    isValidated,
+    bookingConfirmedStatuses.includes(aggregateBookingStatus),
+    departedStatuses.includes(aggregateBookingStatus),
+    arrivedStatuses.includes(aggregateBookingStatus),
+    isRoutingFinalized,
+  ]
+  const currentStepIndex = stepDone.findIndex((done) => !done)
+  const operationSteps: OperationStep[] = [
+    { label: 'Enviada a Operaciones', detail: routing.sales_submitted_at ? formatDisplayDate(routing.sales_submitted_at) : 'Ventas completa el proveedor' },
+    { label: 'Aceptada', detail: routing.operations_accepted_at ? assignedOperationsName : 'Responsable de Operaciones' },
+    { label: 'Validada', detail: isValidated ? 'Lista para booking' : 'Datos del proveedor completos' },
+    { label: 'Booking confirmado', detail: bookings.length ? `${bookings.length} booking${bookings.length === 1 ? '' : 's'} · ${aggregateBookingStatus}` : 'Sin bookings' },
+    { label: 'Embarcada', detail: 'Salida real registrada' },
+    { label: 'Arribada', detail: 'Arribo real registrado' },
+    { label: 'Cerrada', detail: isRoutingFinalized ? 'Finanzas puede revisar costos' : 'Cierre de la operación' },
+  ].map((step, index) => ({
+    ...step,
+    state: stepDone[index]
+      ? 'done'
+      : index === currentStepIndex
+        ? isRoutingCancelled ? 'blocked' : 'current'
+        : 'pending',
+  }))
+  const primaryActionKind: RoutingPrimaryAction['kind'] | null =
+    isRoutingCancelled || isRoutingFinalized
+      ? null
+      : canSalesEditInitialInfo
+        ? 'submit'
+        : !canManageRouting
+          ? null
+          : routing.sales_submitted_at && !routing.operations_accepted_at && canAcceptHandoff
+            ? 'accept'
+            : !isValidated
+              ? 'validate'
+              : allBookingsClosed
+                ? 'finalize'
+                : canCreateBooking || hasBooking
+                  ? 'booking'
+                  : null
+  const primaryAction: RoutingPrimaryAction | null = primaryActionKind === 'submit'
+    ? { kind: 'submit', label: saving ? 'Enviando...' : 'Enviar expediente a Operaciones', icon: Send, disabled: saving }
+    : primaryActionKind === 'accept'
+      ? { kind: 'accept', label: accepting || validating ? 'Procesando...' : hasCompleteSupplier(routing) ? 'Aceptar y validar' : profile?.rol === 'Admin' ? 'Aceptar y asumir expediente' : 'Aceptar expediente', icon: UserCheck, disabled: accepting || validating }
+      : primaryActionKind === 'validate'
+        ? { kind: 'validate', label: validating ? 'Validando...' : 'Validar SI', icon: ShieldCheck, disabled: validating || !routing.operations_accepted_at, title: !routing.operations_accepted_at ? 'Acepta el expediente antes de validarlo' : undefined }
+        : primaryActionKind === 'finalize'
+          ? { kind: 'finalize', label: finalizing ? 'Finalizando...' : 'Finalizar operación', icon: CheckCircle2, disabled: finalizing }
+          : primaryActionKind === 'booking'
+            ? { kind: 'booking', label: creatingBooking ? 'Creando...' : hasBooking ? bookings.length > 1 ? 'Ver bookings' : 'Abrir booking' : 'Crear booking', icon: hasBooking ? ArrowRight : Plus, disabled: creatingBooking }
+            : null
+  const runPrimaryAction = (kind: RoutingPrimaryAction['kind']) => {
+    if (kind === 'submit') return void saveSalesInitialInfo(true)
+    if (kind === 'accept') return void runWithSavedRouting(acceptAndValidate)
+    if (kind === 'validate') return void runWithSavedRouting(validateRouting)
+    if (kind === 'finalize') return void runWithSavedRouting(finalizeRouting)
+    return void runWithSavedRouting(async () => { await handleOpenBooking() })
+  }
+  const PrimaryIcon = primaryAction?.icon
+  // Cerrar exige todos los bookings activos finalizados; antes de eso el botón fallaría.
+  const finalizePendingBookings = canManageRouting && !isRoutingCancelled && !isRoutingFinalized && bookings.length > 0 && !allBookingsClosed
+  const statusTone = operationStatusPresentation(displayStatus).tone
+  const noteLabelClass = 'text-xs font-semibold'
+
   return (
     <div>
+      <UnsavedChangesGuard active={canSave} dirty={isDirty} />
       <Breadcrumbs
         items={[
           {
@@ -1442,31 +1574,27 @@ export default function RoutingDetailPage() {
         ]}
       />
 
-      <div className="mb-6 mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Shipping Instructions {routing.routing_number}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Validación operativa previa al booking.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <CreateContextTaskDialog
-            context={{
-              entityType: 'shipping_instruction',
-              entityId: routing.id,
-              entityLabel: routing.routing_number || 'Shipping Instruction',
-              sourceModule: 'operations',
-              sourcePath: `/operations/shipping-instructions/${routing.id}`,
-            }}
-            suggestedTitle={`Revisar ${routing.routing_number || 'Shipping Instruction'}`}
-          />
-          {canDownloadRoutingPdf && (
-            <>
-              <PdfDownloadButton
-                document={
+      <div className="mb-6 mt-4">
+        <FinancePageHeader
+          eyebrow="Operaciones · Shipping Instruction"
+          icon={ClipboardList}
+          title={<span className="flex flex-wrap items-center gap-3">SI {routing.routing_number}<OperationStatusBadge status={displayStatus} /></span>}
+          description={<>{clientName} · {originLabel} → {destinationLabel}</>}
+          actions={<>
+            <CreateContextTaskDialog
+              context={{
+                entityType: 'shipping_instruction',
+                entityId: routing.id,
+                entityLabel: routing.routing_number || 'Shipping Instruction',
+                sourceModule: 'operations',
+                sourcePath: `/operations/shipping-instructions/${routing.id}`,
+              }}
+              suggestedTitle={`Revisar ${routing.routing_number || 'Shipping Instruction'}`}
+            />
+            {canDownloadRoutingPdf && (
+              <>
+                <PdfDownloadButton
+                  document={
                     <ShippingInstructionOrderPDF
                       routing={routing}
                       quotation={routing.quotation}
@@ -1474,59 +1602,130 @@ export default function RoutingDetailPage() {
                       selectedAgent={selectedAgent}
                       company={companyBranding}
                     />
-                }
-                fileName={routingPdfFileName}
-                className="flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                {({ loading }) => (
-                  <>
-                    <Download className="h-4 w-4" />
-                    {loading ? 'Generando...' : 'Descargar SI PDF'}
-                  </>
-                )}
-              </PdfDownloadButton>
-
+                  }
+                  fileName={routingPdfFileName}
+                  className={financeActionClass}
+                >
+                  {({ loading }) => (
+                    <>
+                      <Download aria-hidden="true" className="h-4 w-4" />
+                      {loading ? 'Generando...' : 'Descargar PDF'}
+                    </>
+                  )}
+                </PdfDownloadButton>
+                <button type="button" onClick={handlePrintRoutingPdf} className={financeActionClass}>
+                  <Printer aria-hidden="true" className="h-4 w-4" />
+                  Imprimir
+                </button>
+              </>
+            )}
+            {canManageRouting && !isRoutingCancelled && (
               <button
                 type="button"
-                onClick={handlePrintRoutingPdf}
-                className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                onClick={() => void runWithSavedRouting(syncRoutingFromPricing)}
+                disabled={refreshingPricingData}
+                className={financeActionClass}
               >
-                <Printer className="h-4 w-4" />
-                Imprimir SI
+                <RefreshCw aria-hidden="true" className={`h-4 w-4 ${refreshingPricingData ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+                {refreshingPricingData ? 'Sincronizando...' : 'Actualizar desde Pricing'}
               </button>
-            </>
-          )}
-
-          {canManageRouting && !isRoutingCancelled && (
-            <button
-              type="button"
-              onClick={syncRoutingFromPricing}
-              disabled={refreshingPricingData}
-              className="flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshingPricingData ? 'animate-spin' : ''}`} />
-              {refreshingPricingData ? 'Sincronizando...' : 'Actualizar desde Pricing'}
-            </button>
-          )}
-
-          {canManageRouting && !isRoutingCancelled && (
-            <select
-              aria-label="Asignar operativo"
-              value={routing.operations_assigned_to || ''}
-              onChange={(e) => assignOperationsUser(e.target.value)}
-              disabled={assigning}
-              className="h-9 min-w-[200px] rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
-            >
-              <option value="">Sin asignar</option>
-              {operationsUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {`${u.nombre || ''} ${u.apellido || ''}`.trim() || u.email}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+            )}
+          </>}
+        />
       </div>
+
+      <section
+        aria-labelledby="si-status-title"
+        className={cn(
+          'mb-6 rounded-2xl border bg-white p-5 shadow-sm dark:bg-[#0b1220] sm:p-6',
+          statusTone === 'red' ? 'border-red-200 dark:border-red-900/60' : statusTone === 'emerald' ? 'border-emerald-200 dark:border-emerald-900/60' : 'border-slate-200 dark:border-slate-700/60'
+        )}
+      >
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#B3282D] dark:text-rose-300">Ruta de la operación</p>
+            <h2 id="si-status-title" className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
+              {shipmentContext ? `Operación ${shipmentContext.shipment.shipment_number}` : 'Estado de la operación'}
+            </h2>
+          </div>
+          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">Responsable</dt>
+              <dd className="mt-1">
+                {canManageRouting && !isRoutingCancelled ? (
+                  <select
+                    data-unsaved-ignore
+                    aria-label="Asignar operativo"
+                    value={routing.operations_assigned_to || ''}
+                    onChange={(e) => { const value = e.target.value; void runWithSavedRouting((current) => assignOperationsUser(value, current)) }}
+                    disabled={assigning}
+                    className="h-9 min-w-[200px] rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                  >
+                    <option value="">Sin asignar</option>
+                    {routing.operations_assigned_to && !assignedOperationsUser && (
+                      <option value={routing.operations_assigned_to} disabled>
+                        {assignedOperationsName}
+                      </option>
+                    )}
+                    {operationsUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {`${u.nombre || ''} ${u.apellido || ''}`.trim() || u.email}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="font-semibold text-slate-900 dark:text-white">{assignedOperationsName}</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">Envío de Ventas</dt>
+              <dd className="mt-1 font-semibold text-slate-900 dark:text-white">{routing.sales_submitted_at ? formatDisplayDate(routing.sales_submitted_at) : 'Pendiente'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">Aceptación</dt>
+              <dd className="mt-1 font-semibold text-slate-900 dark:text-white">{routing.operations_accepted_at ? formatDisplayDate(routing.operations_accepted_at) : 'Pendiente'}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-5 dark:border-slate-800">
+          <OperationStepper steps={operationSteps} label="Avance de la operación" />
+        </div>
+
+        {routing.sales_submitted_at && !routing.operations_accepted_at && canManageRouting && !isRoutingCancelled && (
+          <CostNotice tone="amber" icon={Clock3} className="mt-5">
+            <p className="font-semibold">Expediente pendiente de aceptación</p>
+            <p className="mt-0.5">
+              {canAcceptHandoff
+                ? hasCompleteSupplier(routing)
+                  ? 'Con el botón principal de la barra inferior se acepta y se valida en un solo paso.'
+                  : 'Acéptalo con el botón principal de la barra inferior; para validarlo completa proveedor, contacto, email y dirección.'
+                : `Está asignado a ${assignedOperationsName}; solo esa persona o Admin puede aceptarlo.`}
+            </p>
+          </CostNotice>
+        )}
+        {!canManageRouting && canSalesEditInitialInfo && (
+          <CostNotice tone="sky" icon={InfoIcon} className="mt-5">
+            Completa la información del proveedor y envíala a Operaciones desde la barra inferior.
+          </CostNotice>
+        )}
+        {!canManageRouting && routing.sales_submitted_at && (
+          <CostNotice tone="slate" icon={Lock} className="mt-5">
+            Información enviada a Operaciones. Ventas ya no puede modificar esta Shipping Instruction.
+          </CostNotice>
+        )}
+        {!canManageRouting && !canSalesEditInitialInfo && !routing.sales_submitted_at && (
+          <CostNotice tone="slate" icon={Lock} className="mt-5">
+            Modo lectura: las acciones operativas son de Operaciones o Admin.
+          </CostNotice>
+        )}
+        {isRoutingCancelled && (
+          <CostNotice tone="red" icon={Ban} className="mt-5">
+            Esta Shipping Instruction está cancelada. Los datos se conservan solo como consulta.
+          </CostNotice>
+        )}
+      </section>
 
       <div className="mb-6">
         <SectionNav
@@ -1535,190 +1734,52 @@ export default function RoutingDetailPage() {
         />
       </div>
 
-      {shipmentContext && (
-        <section className="mb-6 rounded-2xl border border-blue-200 bg-blue-50/60 p-5 shadow-sm dark:border-blue-900/60 dark:bg-blue-950/20">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300">
-                Operación canónica
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
-                Shipment {shipmentContext.shipment.shipment_number}
-              </h2>
-            </div>
-            <span className="inline-flex w-fit rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
-              {shipmentContext.shipment.derived_operational_status}
-            </span>
-          </div>
-          <div className="mt-4 grid gap-4 text-sm md:grid-cols-4">
-            <Info label="Shipment ID" value={shipmentContext.shipment.id} />
-            <Info
-              label="Servicio"
-              value={shipmentContext.shipment.service_type || 'N/A'}
-            />
-            <Info
-              label="Origen"
-              value={shipmentContext.shipment.origin || 'N/A'}
-            />
-            <Info
-              label="Destino"
-              value={shipmentContext.shipment.destination || 'N/A'}
-            />
-          </div>
-          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-            Esta página conserva la ruta de Shipping Instruction como contexto
-            documental. Bookings y eventos pertenecen al shipment mostrado.
-          </p>
-        </section>
-      )}
-
       <section
         id="si-overview"
         className="mb-6 scroll-mt-28 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Datos de Cotización
-          </h2>
-
-          {quotationHref && (
-            <Link
-              href={quotationHref}
-              className={`${secondaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
-            >
-              Ver cotización
-              <ExternalLink className="h-3.5 w-3.5" />
+        <OperationSectionTitle
+          icon={FileText}
+          title="Datos de la cotización"
+          description="Referencia comercial y operativa tomada de la cotización y la tarifa seleccionada."
+          actions={quotationHref ? (
+            <Link href={quotationHref} className={financeActionClass}>
+              Ver cotización {quotationNumber}
+              <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
-          )}
-        </div>
+          ) : undefined}
+        />
 
-        <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-          <InfoContent label="No. Cotización">
-            {quotationHref ? (
-              <Link
-                href={quotationHref}
-                className="inline-flex items-center gap-1 text-slate-900 transition hover:text-blue-600 hover:underline dark:text-white dark:hover:text-blue-400"
-              >
-                {quotationNumber}
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-            ) : (
-              quotationNumber
-            )}
-          </InfoContent>
-          <Info
-            label="Cliente"
-            value={getShippingInstructionClient(routing)?.nombre || routing.client_name || 'N/A'}
-          />
-          <Info
-            label="Incoterm"
-            value={routing.quotation?.incoterm || routing.incoterm || 'N/A'}
-          />
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+          <Info label="Cliente" value={clientName} />
+          <Info label="Incoterm" value={routing.quotation?.incoterm || routing.incoterm} />
           <Info label="Negociación" value={routing.freight_terms} />
-          <InfoContent label="Carrier / Naviera">
-            {routing.carrier ? (
-              <CarrierBadge code={routing.carrier} showName size="sm" />
-            ) : (
-              'N/A'
-            )}
+          <InfoContent label="Naviera">
+            {routing.carrier ? <CarrierBadge code={routing.carrier} showName size="sm" /> : '—'}
           </InfoContent>
           <Info label="Agente" value={routing.agent_name} />
-          <Info
-            label="Puerto Origen"
-            value={routing.quotation?.puerto_origen || routing.origin_address || 'N/A'}
-          />
-          <Info
-            label="Puerto Destino"
-            value={routing.quotation?.puerto_destino || routing.destination_address || 'N/A'}
-          />
-          <Info
-            label="Contenedores"
-            value={formatContainerSummary(routing)}
-          />
-          <Info label="Días libres" value={referenceFreeDays} />
-        </div>
-      </section>
-
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-          Información Operativa de Referencia
-        </h2>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Info
-            label="ETD"
-            value={referenceEtd ? formatDisplayDate(referenceEtd) : 'N/A'}
-          />
-          <Info label="Días tránsito" value={referenceTransit} />
+          <Info label="Puerto de origen" value={originLabel} />
+          <Info label="Puerto de destino" value={destinationLabel} />
+          <Info label="Contenedores" value={formatContainerSummary(routing)} />
+          <Info label="ETD estimado" value={referenceEtd ? formatDisplayDate(referenceEtd) : undefined} />
+          <Info label="Días de tránsito" value={referenceTransit} />
           <Info label="Días libres" value={referenceFreeDays} />
           <Info label="Transbordo" value={referenceTransshipment} />
-          <Info
-            label="Dirección de entrega"
-            value={referenceDeliveryAddress}
-          />
-          <Info label="Observaciones internas" value={referenceInternalNotes} />
-          <Info
-            label="Observaciones para cliente/PDF"
-            value={referenceClientNotes}
-          />
-        </div>
-      </section>
-
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Info label="Estado operativo" value={routing.operational_status || 'N/A'} />
-          <Info label="Estado embarque" value={routing.shipment_status || 'N/A'} />
-          <Info
-            label="Envío a Operaciones"
-            value={
-              routing.sales_submitted_at
-                ? `Enviada a Operaciones el ${formatDisplayDate(routing.sales_submitted_at)}`
-                : profile?.rol === 'Ventas'
-                  ? 'Completa la información inicial del proveedor y envíala a Operaciones.'
-                  : 'Pendiente'
-            }
-          />
-          <Info
-            label="Responsable operativo"
-            value={assignedOperationsName}
-          />
-          <Info
-            label="Aceptación de Operaciones"
-            value={
-              routing.operations_accepted_at
-                ? `Aceptado por ${assignedOperationsName} el ${formatDisplayDate(routing.operations_accepted_at)}`
-                : routing.sales_submitted_at
-                  ? 'Pendiente de aceptación'
-                  : 'Pendiente de envío por Ventas'
-            }
-          />
-        </div>
-        {routing.sales_submitted_at && !routing.operations_accepted_at && canManageRouting && (
-          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold">Handoff pendiente</p>
-              <p className="mt-1">
-                El operativo responsable debe aceptar el expediente antes de validarlo o crear el booking.
-              </p>
-            </div>
-            {canAcceptHandoff ? (
-              <button
-                type="button"
-                onClick={acceptOperationsHandoff}
-                disabled={accepting}
-                className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
-              >
-                {accepting ? 'Aceptando...' : 'Aceptar expediente'}
-              </button>
-            ) : (
-              <span className="shrink-0 font-semibold">
-                {profile?.rol === 'Admin'
-                  ? 'Debe aceptarlo el operativo asignado.'
-                  : `Asignado a ${assignedOperationsName}.`}
-              </span>
-            )}
+          <div className="sm:col-span-2 md:col-span-3 xl:col-span-3">
+            <Info label="Dirección de entrega" value={referenceDeliveryAddress} />
           </div>
-        )}
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+            <p className={cn(noteLabelClass, 'flex items-center gap-1.5 text-slate-600 dark:text-slate-300')}><Lock aria-hidden="true" className="h-3.5 w-3.5" />Observaciones internas · no salen en PDF</p>
+            <p className="mt-2 whitespace-pre-line text-sm text-slate-800 dark:text-slate-200">{referenceInternalNotes}</p>
+          </div>
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 dark:border-sky-900/60 dark:bg-sky-950/30">
+            <p className={cn(noteLabelClass, 'flex items-center gap-1.5 text-sky-800 dark:text-sky-200')}><FileText aria-hidden="true" className="h-3.5 w-3.5" />Observaciones para el cliente · salen en PDF</p>
+            <p className="mt-2 whitespace-pre-line text-sm text-slate-800 dark:text-slate-200">{referenceClientNotes}</p>
+          </div>
+        </div>
       </section>
 
       <section
@@ -1726,54 +1787,34 @@ export default function RoutingDetailPage() {
         ref={bookingsSectionRef}
         className="mb-6 scroll-mt-28 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-              Bookings asociados
-            </h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Bookings hijos vinculados a esta Shipping Instruction.
-            </p>
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-              Los bookings se crean por Operaciones cuando la naviera/agente confirma espacio.
-            </p>
-          </div>
-
-          {canCreateBooking && (
+        <OperationSectionTitle
+          icon={Ship}
+          tone="sky"
+          title="Bookings"
+          description="Se crean cuando la naviera o el agente confirma espacio."
+          actions={canCreateBooking && bookings.length > 0 ? (
             <button
               type="button"
-              onClick={handleCreateBookingChild}
+              onClick={() => void runWithSavedRouting(async () => { await handleCreateBookingChild() })}
               disabled={creatingBooking}
-              className={`${primaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
+              className={operationSecondaryButtonClass}
             >
-              <Plus className="h-4 w-4" />
-              {creatingBooking ? 'Creando...' : 'Nuevo Booking'}
+              <Plus aria-hidden="true" className="h-4 w-4" />
+              {creatingBooking ? 'Creando...' : 'Agregar booking'}
             </button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Estado agregado de bookings
-            </p>
-            <span
-              className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getBookingStatusBadgeClass(
-                aggregateBookingStatus
-              )}`}
-            >
-              {aggregateBookingStatus}
-            </span>
-          </div>
-          <Info label="Total bookings" value={bookings.length === 0 ? '0' : bookings.length} />
-          <Info
-            label="Contenedores asignados / total cotizado"
-            value={containerAssignmentSummary}
-          />
+          <InfoContent label="Estado de los bookings">
+            <OperationStatusBadge status={aggregateBookingStatus} />
+          </InfoContent>
+          <Info label="Bookings" value={String(bookings.length)} />
+          <Info label="Contenedores asignados / cotizados" value={containerAssignmentSummary} />
         </div>
 
         <div
-          className="mt-5 overflow-x-auto"
+          className="relative mt-5 overflow-x-auto"
           role="region"
           aria-label="Bookings asociados"
           tabIndex={bookings.length > 0 ? 0 : undefined}
@@ -1781,28 +1822,15 @@ export default function RoutingDetailPage() {
           {bookings.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center dark:border-slate-700">
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                {canManageRouting
-                  ? 'No hay bookings asociados.'
-                  : 'No hay bookings creados todavía.'}
+                {isValidated ? 'Todavía no hay bookings.' : 'El booking se habilita después de validar la SI.'}
               </p>
-              {canCreateBooking && (
-                <button
-                  type="button"
-                  onClick={handleCreateBookingChild}
-                  disabled={creatingBooking}
-                  className={`${primaryButtonClass} mt-4 inline-flex items-center justify-center gap-2 px-4 py-2`}
-                >
-                  <Plus className="h-4 w-4" />
-                  {creatingBooking ? 'Creando...' : 'Nuevo Booking'}
-                </button>
-              )}
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <tr>
                   <th scope="col" className="py-3 pr-4">Booking</th>
-                  <th scope="col" className="pr-4">Carrier Booking</th>
+                  <th scope="col" className="pr-4">Ref. naviera</th>
                   <th scope="col" className="pr-4">Master BL</th>
                   <th scope="col" className="pr-4">House BL</th>
                   <th scope="col" className="pr-4">Estado</th>
@@ -1813,52 +1841,27 @@ export default function RoutingDetailPage() {
                   <th scope="col"><span className="sr-only">Acciones</span></th>
                 </tr>
               </thead>
-
               <tbody>
                 {bookings.map((booking) => (
-                  <tr
-                    key={booking.id}
-                    className="border-t border-slate-100 dark:border-slate-800"
-                  >
-                    <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
-                      {booking.booking_number || 'Sin booking'}
-                    </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {booking.carrier_booking || 'N/A'}
-                    </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {booking.master_bl || 'N/A'}
-                    </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {booking.house_bl || 'N/A'}
-                    </td>
-                    <td className="pr-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getBookingStatusBadgeClass(
-                          booking.shipment_status
-                        )}`}
-                      >
-                        {booking.shipment_status || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {formatDisplayDate(booking.etd)}
-                    </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {formatDisplayDate(booking.eta)}
-                    </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {booking.free_days ?? 'N/A'}
-                    </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {formatBookingContainers(booking.booking_containers)}
-                    </td>
-                    <td className="text-right">
+                  <tr key={booking.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <th scope="row" className="whitespace-nowrap py-3 pr-4 text-left font-semibold text-slate-900 dark:text-white">
+                      {booking.booking_number || 'Sin número'}
+                    </th>
+                    <td className="whitespace-nowrap pr-4 text-slate-700 dark:text-slate-300">{booking.carrier_booking || '—'}</td>
+                    <td className="whitespace-nowrap pr-4 text-slate-700 dark:text-slate-300">{booking.master_bl || '—'}</td>
+                    <td className="whitespace-nowrap pr-4 text-slate-700 dark:text-slate-300">{booking.house_bl || '—'}</td>
+                    <td className="pr-4"><OperationStatusBadge status={booking.shipment_status} className="whitespace-nowrap" /></td>
+                    <td className="whitespace-nowrap pr-4 tabular-nums text-slate-700 dark:text-slate-300">{booking.etd ? formatDisplayDate(booking.etd) : '—'}</td>
+                    <td className="whitespace-nowrap pr-4 tabular-nums text-slate-700 dark:text-slate-300">{booking.eta ? formatDisplayDate(booking.eta) : '—'}</td>
+                    <td className="pr-4 tabular-nums text-slate-700 dark:text-slate-300">{booking.free_days ?? '—'}</td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">{formatBookingContainers(booking.booking_containers)}</td>
+                    <td className="py-2 text-right">
                       <Link
                         href={bookingDetailHref(booking.id)}
-                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        aria-label={`Abrir booking ${booking.booking_number || booking.carrier_booking || ''}`.trim()}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
-                        Abrir
+                        Abrir <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
                       </Link>
                     </td>
                   </tr>
@@ -1869,433 +1872,88 @@ export default function RoutingDetailPage() {
         </div>
       </section>
 
-      {!canManageRouting && canSalesEditInitialInfo && (
-        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
-          Completa la información inicial del proveedor y envíala a Operaciones.
-        </div>
-      )}
-
-      {!canManageRouting && routing.sales_submitted_at && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-          Información enviada a Operaciones. Ventas ya no puede modificar esta Shipping Instruction.
-        </div>
-      )}
-
-      {!canManageRouting && !canSalesEditInitialInfo && !routing.sales_submitted_at && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-          Modo lectura: Ventas puede consultar la Shipping Instruction creada, pero las acciones operativas son de Operaciones/Admin.
-        </div>
-      )}
-
-      <div
-        id="si-information"
-        className="scroll-mt-28 grid gap-6 lg:grid-cols-2"
-      >
+      <div id="si-information" className="scroll-mt-28 grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Proveedor / Shipper Contact
-          </h2>
-
+          <OperationSectionTitle icon={Building2} tone="amber" title="Proveedor (Shipper)" description="Obligatorio para validar: proveedor, contacto, email y dirección." />
           <div className="mt-4 grid gap-4 text-sm md:grid-cols-2">
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Proveedor
-              </label>
-              <input
-                value={routing.supplier_name || ''}
-                onChange={(e) => updateRouting('supplier_name', e.target.value)}
-                disabled={!canEditSupplierInfo}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Contacto
-              </label>
-              <input
-                value={routing.supplier_contact || ''}
-                onChange={(e) => updateRouting('supplier_contact', e.target.value)}
-                disabled={!canEditSupplierInfo}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Email
-              </label>
-              <input
-                value={routing.supplier_email || ''}
-                onChange={(e) => updateRouting('supplier_email', e.target.value)}
-                disabled={!canEditSupplierInfo}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Teléfono
-              </label>
-              <input
-                value={routing.supplier_phone || ''}
-                onChange={(e) => updateRouting('supplier_phone', e.target.value)}
-                disabled={!canEditSupplierInfo}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Dirección
-              </label>
-              <input
-                value={routing.supplier_address || ''}
-                onChange={(e) => updateRouting('supplier_address', e.target.value)}
-                disabled={!canEditSupplierInfo}
-                className={inputClassName}
-              />
-            </div>
+            <label className="md:col-span-2">
+              <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Proveedor *</span>
+              <input value={routing.supplier_name || ''} onChange={(e) => updateRouting('supplier_name', e.target.value)} disabled={!canEditSupplierInfo} className={inputClassName} />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Contacto *</span>
+              <input value={routing.supplier_contact || ''} onChange={(e) => updateRouting('supplier_contact', e.target.value)} disabled={!canEditSupplierInfo} className={inputClassName} />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Email *</span>
+              <input type="email" value={routing.supplier_email || ''} onChange={(e) => updateRouting('supplier_email', e.target.value)} disabled={!canEditSupplierInfo} className={inputClassName} />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Teléfono</span>
+              <input value={routing.supplier_phone || ''} onChange={(e) => updateRouting('supplier_phone', e.target.value)} disabled={!canEditSupplierInfo} className={inputClassName} />
+            </label>
+            <label>
+              <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Dirección *</span>
+              <input value={routing.supplier_address || ''} onChange={(e) => updateRouting('supplier_address', e.target.value)} disabled={!canEditSupplierInfo} className={inputClassName} />
+            </label>
           </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Comentarios / Remarks
-          </h2>
-
+          <OperationSectionTitle icon={MessageSquareText} title="Comentarios" description="Instrucciones del cliente o información adicional del proveedor." />
           <textarea
+            aria-label="Comentarios"
             value={routing.sales_observations || ''}
             onChange={(e) => updateRouting('sales_observations', e.target.value)}
             disabled={!canEditSupplierInfo}
-            rows={10}
+            rows={8}
             placeholder="Notas comerciales, instrucciones del cliente, información adicional del proveedor..."
             className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           />
         </section>
 
         {canManageRouting && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-              Instrucciones BL
-            </h2>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Freight Terms
-                </label>
-
-                <select
-                  value={routing.freight_terms || ''}
-                  onChange={(e) =>
-                    setRouting({
-                      ...routing,
-                      freight_terms: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                >
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] lg:col-span-2">
+            <OperationSectionTitle icon={FileText} tone="sky" title="Instrucciones de BL" description="Valores por defecto para los bookings y BL de esta operación." />
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              <label>
+                <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Términos de flete</span>
+                <select value={routing.freight_terms || ''} disabled={isRoutingCancelled} onChange={(e) => setRouting({ ...routing, freight_terms: e.target.value })} className={inputClassName}>
                   <option value="">Seleccionar</option>
                   <option value="Collect">Collect</option>
                   <option value="Prepaid">Prepaid</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Release Type
-                </label>
-
-                <select
-                  value={routing.release_type || ''}
-                  onChange={(e) =>
-                    setRouting({
-                      ...routing,
-                      release_type: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                >
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Tipo de liberación</span>
+                <select value={routing.release_type || ''} disabled={isRoutingCancelled} onChange={(e) => setRouting({ ...routing, release_type: e.target.value })} className={inputClassName}>
                   <option value="">Seleccionar</option>
                   <option value="Express Release">Express Release</option>
-                  <option value="Original BL">Original BL</option>
+                  <option value="Original BL">BL original</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  HBL Freight Visibility
-                </label>
-
-                <select
-                  value={routing.hbl_freight_visibility || ''}
-                  onChange={(e) =>
-                    setRouting({
-                      ...routing,
-                      hbl_freight_visibility: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                >
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Flete en el HBL</span>
+                <select value={routing.hbl_freight_visibility || ''} disabled={isRoutingCancelled} onChange={(e) => setRouting({ ...routing, hbl_freight_visibility: e.target.value })} className={inputClassName}>
                   <option value="">Seleccionar</option>
-                  <option value="No Freight Charges">
-                    No mostrar flete
-                  </option>
-                  <option value="Show Freight Charges">
-                    Mostrar flete
-                  </option>
+                  <option value="No Freight Charges">No mostrar flete</option>
+                  <option value="Show Freight Charges">Mostrar flete</option>
                 </select>
-              </div>
-
-              <div className="flex items-center gap-3 pt-6">
-                <input
-                  type="checkbox"
-                  checked={routing.printed_at_destination || false}
-                  onChange={(e) =>
-                    setRouting({
-                      ...routing,
-                      printed_at_destination: e.target.checked,
-                    })
-                  }
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-
-                <label className="text-sm text-slate-700 dark:text-slate-300">
-                  Printed at destination
-                </label>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Insurance
-                </label>
-
-                <select
-                  value={routing.insurance_requested ? 'Yes' : 'No'}
-                  onChange={(e) =>
-                    setRouting({
-                      ...routing,
-                      insurance_requested: e.target.value === 'Yes',
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                >
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Seguro</span>
+                <select value={routing.insurance_requested ? 'Yes' : 'No'} disabled={isRoutingCancelled} onChange={(e) => setRouting({ ...routing, insurance_requested: e.target.value === 'Yes' })} className={inputClassName}>
                   <option value="No">No</option>
-                  <option value="Yes">Yes</option>
+                  <option value="Yes">Sí</option>
                 </select>
-              </div>
+              </label>
+              <label className="flex items-center gap-3 self-end rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-300">
+                <input type="checkbox" checked={routing.printed_at_destination || false} disabled={isRoutingCancelled} onChange={(e) => setRouting({ ...routing, printed_at_destination: e.target.checked })} className="h-4 w-4 rounded border-slate-300" />
+                BL impreso en destino
+              </label>
             </div>
           </section>
         )}
-
-        <section className="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] lg:col-span-2">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Shipping Instructions
-          </h2>
-
-          <div className="mt-4 grid gap-3 text-sm lg:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Shipper
-              </label>
-              <input
-                value={routing.shipper || ''}
-                onChange={(e) => updateRouting('shipper', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Consignee
-              </label>
-              <input
-                value={routing.consignee || ''}
-                onChange={(e) => updateRouting('consignee', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <input
-              value={routing.consignee_tax_id || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_tax_id: e.target.value })}
-              placeholder="RTN / Tax ID Consignee"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.consignee_address || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_address: e.target.value })}
-              placeholder="Dirección Consignee"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.consignee_contact || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_contact: e.target.value })}
-              placeholder="Contacto Consignee"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.consignee_email || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_email: e.target.value })}
-              placeholder="Email Consignee"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.consignee_phone || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_phone: e.target.value })}
-              placeholder="Teléfono Consignee"
-              className={inputClassName}
-            />
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Notify Party
-              </label>
-              <input
-                value={routing.notify_party || ''}
-                onChange={(e) => updateRouting('notify_party', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <input
-              value={routing.notify_party_tax_id || ''}
-              onChange={(e) => setRouting({ ...routing, notify_party_tax_id: e.target.value })}
-              placeholder="RTN / Tax ID Notify Party"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.notify_party_address || ''}
-              onChange={(e) => setRouting({ ...routing, notify_party_address: e.target.value })}
-              placeholder="Dirección Notify Party"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.notify_party_contact || ''}
-              onChange={(e) => setRouting({ ...routing, notify_party_contact: e.target.value })}
-              placeholder="Contacto Notify Party"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.notify_party_email || ''}
-              onChange={(e) => setRouting({ ...routing, notify_party_email: e.target.value })}
-              placeholder="Email Notify Party"
-              className={inputClassName}
-            />
-
-            <input
-              value={routing.notify_party_phone || ''}
-              onChange={(e) => setRouting({ ...routing, notify_party_phone: e.target.value })}
-              placeholder="Teléfono Notify Party"
-              className={inputClassName}
-            />
-          </div>
-        </section>
-      </div>
-
-      <div
-        id="si-actions"
-        className="mt-6 flex scroll-mt-28 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          {canCancelRouting && (
-            <button
-              type="button"
-              onClick={() => setCancelDialogOpen(true)}
-              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
-            >
-              Cancelar SI
-            </button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {isRoutingCancelled && (
-            <span className="inline-flex items-center rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300">
-              Cancelada
-            </span>
-          )}
-
-          {isRoutingFinalized && !isRoutingCancelled && (
-            <span className="inline-flex items-center rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-              ✓ Finalizado
-            </span>
-          )}
-
-          {canSalesEditInitialInfo && (
-            <button
-              type="button"
-              onClick={() => saveSalesInitialInfo(true)}
-              disabled={saving}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-            >
-              {saving ? 'Enviando...' : 'Enviar a Operaciones'}
-            </button>
-          )}
-
-          {canManageRouting && !isRoutingCancelled && (
-            <>
-              {routing.operational_status !== SI_READY_FOR_BOOKING &&
-                routing.shipment_status !== SI_VALIDATED && (
-                  <button
-                    type="button"
-                    onClick={validateRouting}
-                    disabled={validating || !routing.operations_accepted_at}
-                    title={!routing.operations_accepted_at ? 'Acepta el expediente antes de validarlo' : undefined}
-                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    {validating ? 'Validando...' : 'Validar SI'}
-                  </button>
-                )}
-
-              {(routing.operational_status === SI_READY_FOR_BOOKING ||
-                routing.shipment_status === SI_VALIDATED) && (
-                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Listo para Booking
-                </span>
-              )}
-
-              {!isRoutingFinalized && (
-                <button
-                  type="button"
-                  onClick={finalizeRouting}
-                  disabled={finalizing}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  {finalizing ? 'Finalizando...' : 'Finalizar operación'}
-                </button>
-              )}
-
-              {(canCreateBooking || hasBooking) && (
-                <button
-                  type="button"
-                  onClick={handleOpenBooking}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  {hasBooking ? 'Abrir Booking' : 'Crear Booking'}
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={saveRouting}
-                disabled={saving || isRoutingCancelled}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-              >
-                {saving ? 'Guardando...' : 'Guardar SI'}
-              </button>
-            </>
-          )}
-        </div>
       </div>
 
       <section
@@ -2304,7 +1962,7 @@ export default function RoutingDetailPage() {
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Timeline Operativo ({operationalEvents.length} eventos)
+            Historial operativo ({operationalEvents.length} eventos)
           </h2>
 
           {shouldShowTimelineToggle && (
@@ -2387,6 +2045,39 @@ export default function RoutingDetailPage() {
         </div>
       </section>
 
+      {(canSave || primaryAction || canCancelRouting || isRoutingFinalized) && (
+        <div id="si-actions" className="scroll-mt-28">
+          <OperationSaveBar
+            dirty={isDirty}
+            saving={saving}
+            disabled={!canSave}
+            onSave={() => void (canManageRouting ? saveRouting() : saveSalesInitialInfo(false))}
+          >
+            {isRoutingFinalized && !isRoutingCancelled && (
+              <OperationStatusBadge status="Finalizado" />
+            )}
+            {canCancelRouting && (
+              <button type="button" onClick={() => setCancelDialogOpen(true)} className={operationDangerButtonClass}>
+                <Ban aria-hidden="true" className="h-4 w-4" />
+                Cancelar SI
+              </button>
+            )}
+            {finalizePendingBookings && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                La operación se cierra al finalizar su último booking.
+              </span>
+            )}
+            {primaryAction && PrimaryIcon && (
+              <button type="button" onClick={() => runPrimaryAction(primaryAction.kind)} disabled={primaryAction.disabled} title={primaryAction.title} className={operationPrimaryButtonClass}>
+                <PrimaryIcon aria-hidden="true" className="h-4 w-4" />
+                {primaryAction.label}
+              </button>
+            )}
+          </OperationSaveBar>
+        </div>
+      )}
+
+
       <Dialog
         open={cancelDialogOpen}
         onOpenChange={(open) => {
@@ -2397,7 +2088,7 @@ export default function RoutingDetailPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <OperationDialogContent icon={Ban} tone="red" eyebrow={`SI ${routing.routing_number}`}>
           <DialogHeader>
             <DialogTitle>Cancelar Shipping Instruction</DialogTitle>
             <DialogDescription>
@@ -2406,10 +2097,11 @@ export default function RoutingDetailPage() {
           </DialogHeader>
 
           <div className="space-y-3">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              Motivo de cancelación
+            <label htmlFor="si-cancel-reason" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Motivo de cancelación *
             </label>
             <textarea
+              id="si-cancel-reason"
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}
               rows={4}
@@ -2418,25 +2110,25 @@ export default function RoutingDetailPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <button
               type="button"
               onClick={() => setCancelDialogOpen(false)}
               disabled={cancelling}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className={operationSecondaryButtonClass}
             >
-              Cancelar
+              Volver
             </button>
             <button
               type="button"
               onClick={cancelRouting}
-              disabled={cancelling}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              disabled={cancelling || !cancelReason.trim()}
+              className={operationDangerSolidButtonClass}
             >
               {cancelling ? 'Cancelando...' : 'Confirmar cancelación'}
             </button>
-          </div>
-        </DialogContent>
+          </DialogFooter>
+        </OperationDialogContent>
       </Dialog>
     </div>
   )

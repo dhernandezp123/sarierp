@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mountPage } from './page-harness.mjs'
 import loadTs from './load-ts.mjs'
 const products=loadTs('src/lib/quotation-products.ts')
+const {normalizeMiamiRateDestination}=loadTs('src/lib/miami-rate-destination.ts')
 const settings={default_tax_rate:15,insurance_cost_rate_percent:0.28,insurance_included_service_patterns:['Ocean Freight','Air Freight','origin_charge'],insurance_excluded_service_patterns:[]}
 
 async function form({product='miami_lcl',clientPolicy=false,saleRate=1,company=settings,creationError=false,sourceQuote=null,sourceItems=[]}={}) {
@@ -24,8 +25,9 @@ async function form({product='miami_lcl',clientPolicy=false,saleRate=1,company=s
     '@/src/lib/quotation-create':{createQuotation:async(_client,input)=>{saves.push(input);if(creationError)throw Error('RPC rechazó la creación');return{id:input.quotation.id,quotation_number:'TEST'}}},
     '@/src/components/quotations/MiamiQuotationSection':{MiamiQuotationSection:'MiamiQuotationSection'},
     '@/src/components/ui/ClienteCombobox':{ClienteCombobox:'ClienteCombobox'},
+    '@/src/components/clientes/NewClientDialog':{__esModule:true,default:'NewClientDialog'},
     '@/src/components/ui/UnsavedChangesGuard':{UnsavedChangesGuard:'Guard',markFormSaved(){}},
-    '@/src/hooks/useMiamiQuotation':{useMiamiQuotation:()=>({isMiamiFlow:true,lclEstimated:500,airEstimated:500,canUseMiamiCalculator:true,buildMiamiPricingItems:id=>[freight(id)],buildMiamiPreviewItems:()=>[freight('preview')]})},
+    '@/src/hooks/useMiamiQuotation':{useMiamiQuotation:({rateDestination})=>({miamiRateDestination:normalizeMiamiRateDestination(rateDestination),isMiamiFlow:true,lclEstimated:500,airEstimated:500,canUseMiamiCalculator:true,buildMiamiPricingItems:id=>[freight(id)],buildMiamiPreviewItems:()=>[freight('preview')]})},
     '@react-pdf/renderer':{pdf:element=>{previews.push(element.props);return{toBlob:async()=>new Blob(['demo'])}}},
     sonner:{toast:{error:message=>errors.push(message),success(){},info(){}}},
   },{expand:type=>typeof type==='function'})
@@ -169,3 +171,28 @@ test('sin tasa o configuración no se aprueba ni se genera PDF incompleto; error
     } finally {f.cleanup()}
   }
 })
+
+ test('duplicating a TGU quote keeps its tariff destination despite the client default',async()=>{
+  const f=await form({sourceQuote:{id:'source',quotation_number:'SOURCE',cliente_id:'client',service_product:'miami_lcl',quote_type:'LCL',tipo_transporte:'Maritima',incoterm:'FOB',requires_insurance:false,miami_rate_destination:'TGU'}})
+  try {
+    await f.page.button('Previsualizar PDF').props.onClick()
+    assert.equal(f.previews.at(-1).quotation.miami_rate_destination,'TGU')
+    await f.page.button('Crear cotización aprobada').props.onClick()
+    assert.equal(f.saves[0].quotation.miami_rate_destination,'TGU')
+  } finally {f.cleanup()}
+ })
+ test('quote-only tariff choice survives other edits and client change restores its default',async()=>{
+  for(const product of ['miami_lcl','miami_air']) {
+    const f=await form({product})
+    try {
+      const section=f.page.find(n=>n.type==='MiamiQuotationSection')
+      section.props.handleChange({target:{name:'miami_rate_destination',value:'TGU',type:'select-one'}});f.page.render()
+      f.change('contact_name','Otro contacto')
+      await f.page.button('Previsualizar PDF').props.onClick()
+      assert.equal(f.previews.at(-1).quotation.miami_rate_destination,'TGU')
+      f.selectClient('other-client')
+      await f.page.button('Previsualizar PDF').props.onClick()
+      assert.equal(f.previews.at(-1).quotation.miami_rate_destination,'SPS')
+    } finally {f.cleanup()}
+  }
+ })

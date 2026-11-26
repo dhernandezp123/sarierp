@@ -912,19 +912,20 @@ export default function VentasPage() {
       </div>
 
       {/* ── View toggle ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/50 w-fit">
+      <div role="group" aria-label="Vista de actividades" className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/50 w-fit">
         {([
           { mode: 'list'     as const, label: 'Lista',      icon: LayoutList },
           { mode: 'calendar' as const, label: 'Calendario', icon: Calendar   },
         ]).map(({ mode, label, icon: Icon }) => (
           <button key={mode} type="button"
+            aria-pressed={viewMode === mode}
             onClick={() => { setViewMode(mode); setSelectedDay(null) }}
             className={`flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-medium transition ${
               viewMode === mode
                 ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
             }`}>
-            <Icon size={14} />
+            <Icon size={14} aria-hidden="true" />
             {label}
           </button>
         ))}

@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { useTreasuryAccounts } from '@/src/hooks/useTreasuryAccounts'
 import { TreasuryAccountField } from '@/src/components/accounting/TreasuryAccountField'
-import { NumberInput } from '@/src/components/ui/NumberInput'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -379,11 +379,11 @@ export function SupplierPayableDetail({ id: requestedId, embedded = false, onBus
         {showPagoForm && (
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
             <TreasuryAccountField {...treasury} currency={cuenta.moneda} value={bankAccount} onChange={setBankAccount}/>
-            {!!treasury.accounts.length&&cuenta.moneda==='USD'&&<label className="flex min-w-0 flex-col gap-1.5 my-3 text-xs"><span className={fieldLabelClass}>Tasa HNL por USD del pago</span><NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
-            <div className="grid gap-3 md:grid-cols-2">
+            {!!treasury.accounts.length&&cuenta.moneda==='USD'&&<label className="flex min-w-0 flex-col gap-1.5 my-3 text-xs"><span className={fieldLabelClass}>Tasa HNL por USD del pago</span><NumberInput numericKind="exchange" value={bankRate} min="0.000001" step="0.000001"  onChange={e=>setBankRate(e.target.value)}/></label>}
+            <div className="finance-field-row gap-3 ">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>
-                <NumberInput type="number" step="0.01" min="0.01" max={saldoPendiente} value={pagoForm.monto} onChange={setP('monto')} className={fieldClass}
+                <NumberInput numericKind="money" type="number" step="0.01" min="0.01" max={saldoPendiente} value={pagoForm.monto} onChange={setP('monto')}
                   placeholder={`Max. ${fmtMoney(saldoPendiente, cuenta.moneda)}`} />
               </div>
               <div>
@@ -524,12 +524,12 @@ export function SupplierPayableDetail({ id: requestedId, embedded = false, onBus
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>
-                <NumberInput type="number"
+                <NumberInput numericKind="money" type="number"
                   step="0.01"
                   min="0"
                   value={ncNdForm.monto}
                   onChange={(e) => setNcNdForm((f) => ({ ...f, monto: e.target.value }))}
-                  className={fieldClass}
+
                   placeholder="0.00"
                 />
               </div>

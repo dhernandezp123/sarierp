@@ -5,6 +5,7 @@ import {
 } from '@/src/lib/booking-status'
 import { getMissingBookingDocuments } from '@/src/lib/booking-operational-state'
 import { calendarDaysUntil } from '@/src/lib/format'
+import { effectiveRemainingFreeDays } from '@/src/lib/booking-transit'
 import { readAllReportRows, readReportRowsByIds } from '@/src/lib/report-query'
 
 export type SystemAlertCategory = 'Comercial' | 'Operativa' | 'Gerencial'
@@ -124,6 +125,7 @@ type BookingRow = {
   booking_lifecycle_status: 'ACTIVE' | 'CANCELLED' | 'REPLACED'
   replaced_by_booking_id: string | null
   remaining_free_days: number | null
+  free_days?: number | null
   shipment: ShipmentRoutingJoin | ShipmentRoutingJoin[] | null
   booking_documents: BookingDocumentJoin[] | null
   bills_of_lading: BillOfLadingJoin[] | null
@@ -417,6 +419,7 @@ export async function getSystemAlerts(
       booking_lifecycle_status,
       replaced_by_booking_id,
       remaining_free_days,
+      free_days,
       shipment:shipments!bookings_shipment_id_fkey (
         id,
         shipment_number,
@@ -728,7 +731,9 @@ export async function getSystemAlerts(
       bills: booking.bills_of_lading,
     }).map((document) => document.label)
     const etaDays = calendarDaysUntil(booking.actual_eta || booking.eta)
-    const remainingFreeDays = Number(booking.remaining_free_days)
+    // Calculado desde el arribo real; null no se trata como 0 días.
+    const remainingValue = effectiveRemainingFreeDays(booking)
+    const remainingFreeDays = remainingValue === null ? Number.NaN : Number(remainingValue)
     const assignedContainers = (booking.booking_containers || []).reduce(
       (sum, container) => sum + Number(container.quantity || 0),
       0
