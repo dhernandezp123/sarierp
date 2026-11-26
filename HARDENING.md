@@ -17177,3 +17177,7 @@ Agregar una entrada por fix:
 - Revision adicional: la nueva ruta HR de main carga archivos mediante service_role; Demo la bloquea antes de autenticar o leer archivos para preservar el limite de Storage. Variante de paridad y regresion tests/demo-hr-documents.test.mjs agregadas.
 
 - Ampliacion revisada: marcas Demo en hr-certificate-pdf.tsx, hr-payslip-pdf.tsx y hr-benefit-pdf.tsx. Tres pruebas renderizadas verifican el aviso en cada pagina, incluido comprobante multipagina. Environment parity usa el manifiesto revisado de Demo para evitar depender de huellas historicas de main; sigue siendo comparacion de solo lectura. CI 45739076502 database aprobado (instalacion limpia y SQL/RLS).
+
+- Aplicacion SQL completada en Demo: las 24 migraciones y sus fuentes verificadas; 202 migraciones totales, 173/173 tablas con RLS y 0 buckets publicos. La transaccion permanente preservo las 139 tablas anteriores. Build aislado y OCR empaquetado OK; TypeScript final OK y cuatro regresiones nuevas aprobadas. Detalle: docs/quality/demo-sync-2026-11-25.md. Merge 0f2d378; adaptaciones 916bbd0. Publicacion frontend y CI final 45739562519 aun pendientes al registrar esta entrada.
+
+- Gate de publicacion: Quality 45739562519 SUCCESS para 916bbd0; aplicacion (714 pruebas, TypeScript, paridad, lint, build/OCR) y database (instalacion limpia y SQL/RLS) aprobados. El siguiente commit solo documenta estas evidencias.
