@@ -5,7 +5,9 @@ import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/src/components/theme-provider";
 import { TenantProvider } from "@/src/components/tenant/TenantProvider";
+import { TenantFeaturesProvider } from "@/src/components/tenant/TenantFeatures";
 import { readTenantHeaders } from "@/src/lib/tenant-context";
+import { isWhatsappTenantAllowed } from "@/src/lib/whatsapp-intake";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -53,6 +55,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const tenant = readTenantHeaders(await headers())
+  // WhatsApp (Kapso) por ahora pertenece a una sola empresa: KAPSO_TENANT_SLUG.
+  const features = { whatsappIntake: isWhatsappTenantAllowed(tenant?.slug, process.env.KAPSO_TENANT_SLUG) }
   const tenantStyles = tenant
     ? ({
         '--tenant-primary': tenant.primaryColor,
@@ -70,10 +74,12 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         <TenantProvider tenant={tenant}>
-          <ThemeProvider>
-            {children}
-            <Toaster richColors position="top-right" />
-          </ThemeProvider>
+          <TenantFeaturesProvider features={features}>
+            <ThemeProvider>
+              {children}
+              <Toaster richColors position="top-right" />
+            </ThemeProvider>
+          </TenantFeaturesProvider>
         </TenantProvider>
       </body>
     </html>

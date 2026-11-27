@@ -26,6 +26,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/operations/shipping-instructions',
     '/historico',
     '/settings/company',
+    '/solicitudes-whatsapp',
     '/support',
   ],
 
@@ -41,6 +42,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/reports',
     '/historico',
     '/settings/company',
+    '/solicitudes-whatsapp',
     '/support',
   ],
 

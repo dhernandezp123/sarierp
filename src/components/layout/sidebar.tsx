@@ -13,12 +13,13 @@ import { NOTIFICATIONS_READ_EVENT } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import { TenantBrand } from '@/src/components/tenant/TenantBrand'
 import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { useTenantFeatures } from '@/src/components/tenant/TenantFeatures'
 import { OUTLOOK_INTAKE_STANDBY } from '@/src/lib/mail-intake'
 import {
   LayoutDashboard, LogOut, Users, FileText, ActivitySquare, CalendarClock,
   Scale, DollarSign, BarChart3, Building2, Database, Route, Bell, Receipt,
   Package, ClipboardList, Warehouse, ShieldCheck, ShoppingBag, CreditCard,
-  ShieldAlert, Mail, LifeBuoy, UserRound, CalendarDays, IdCard, CalendarCog, ChevronDown, Plus, type LucideIcon,
+  ShieldAlert, Mail, MessageSquare, LifeBuoy, UserRound, CalendarDays, IdCard, CalendarCog, ChevronDown, Plus, type LucideIcon,
 } from 'lucide-react'
 
 type NavItem = { label: string; href: string; icon: LucideIcon; exact?: boolean }
@@ -43,6 +44,7 @@ export default function Sidebar({ role }: { role?: string }) {
   const router = useRouter()
   const { profile, user } = useUser()
   const tenant = useTenant()
+  const { whatsappIntake } = useTenantFeatures()
   const currentRole = profile?.rol ?? role
   const isPlatformAdmin = profile?.is_platform_admin === true
   const navId = useId()
@@ -129,6 +131,11 @@ export default function Sidebar({ role }: { role?: string }) {
   ]
 
   const costItems = [
+    ...(whatsappIntake ? [{
+      label: 'Solicitudes WhatsApp',
+      href: '/solicitudes-whatsapp',
+      icon: MessageSquare,
+    }] : []),
     {
       label: 'Comparativo de tarifas',
       href: '/pricing-comparison',
@@ -267,6 +274,11 @@ export default function Sidebar({ role }: { role?: string }) {
       label: 'Solicitudes por Outlook',
       href: '/settings/mail-intake',
       icon: Mail,
+    }] : []),
+    ...(whatsappIntake ? [{
+      label: 'Números de WhatsApp',
+      href: '/settings/whatsapp',
+      icon: MessageSquare,
     }] : []),
   ]
 
