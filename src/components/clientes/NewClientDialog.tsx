@@ -57,11 +57,19 @@ const initialForm = {
 
 export type CreatedClient = { id: string; codigo_cliente: string | null; nombre: string | null }
 
+/** Datos del alta rápida cuando el cliente se crea después, dentro de otra operación (WA-04). */
+export type ClientDraft = {
+  nombre: string; nit: string; contacto: string; telefono: string; email_1: string; pais: string
+  tipo_persona: string; billing_office_id: string | null; condicion_pago: string; dias_credito: number; tipo_cliente: string
+}
+
 export default function NewClientDialog({
   open,
   onOpenChange,
   initialName = '',
   onCreated,
+  onDraft,
+  fixedSellerName,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -69,6 +77,10 @@ export default function NewClientDialog({
   initialName?: string
   /** Si se indica, la pantalla que abrió el diálogo selecciona el cliente creado. */
   onCreated?: (cliente: CreatedClient) => void | Promise<void>
+  /** Si se indica, no se inserta: se devuelven los datos para crearlos en otra operación. */
+  onDraft?: (draft: ClientDraft) => void
+  /** Vendedor fijo (no seleccionable) al que quedará asignado el cliente. */
+  fixedSellerName?: string
 }) {
   const { profile } = useUser()
   const router = useRouter()
@@ -117,6 +129,23 @@ export default function NewClientDialog({
   }
 
   const handleCreate = async () => {
+    if (onDraft) {
+      if (!form.nombre.trim()) {
+        toast.error('El nombre del cliente es obligatorio')
+        return
+      }
+      onDraft({
+        nombre: form.nombre.trim(), nit: form.nit, contacto: form.contacto, telefono: form.telefono,
+        email_1: form.email_1, pais: form.pais, tipo_persona: form.tipo_persona,
+        billing_office_id: form.billing_office_id || null, condicion_pago: form.condicion_pago,
+        dias_credito: isCreditPayment(form.condicion_pago) ? Number(form.dias_credito || 0) : 0,
+        tipo_cliente: form.tipo_cliente,
+      })
+      toast.success('Cliente listo', { description: 'Se creará al guardar la cotización.' })
+      setForm(initialForm)
+      onOpenChange(false)
+      return
+    }
     setSaving(true)
 
     const { cliente, error } = await createClienteRecord(
@@ -293,6 +322,9 @@ export default function NewClientDialog({
           </Field>
 
           <Field label="Vendedor asignado">
+            {fixedSellerName ? (
+              <p className={`${fieldClass} flex items-center bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-300`}>{fixedSellerName}</p>
+            ) : (
             <select
               name="vendedor_asignado"
               value={form.vendedor_asignado}
@@ -306,6 +338,7 @@ export default function NewClientDialog({
                 </option>
               ))}
             </select>
+            )}
           </Field>
 
           <p className="text-xs text-slate-400 dark:text-slate-500">

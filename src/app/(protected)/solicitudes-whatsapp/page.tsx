@@ -1,8 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { MessageSquare } from 'lucide-react'
+import { FilePlus2, MessageSquare, UserPlus } from 'lucide-react'
 import { useUser } from '@/src/hooks/useUser'
 import { useTenantFeatures } from '@/src/components/tenant/TenantFeatures'
 import { supabase } from '@/src/lib/supabase/client'
@@ -16,14 +18,17 @@ import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/components/ui/dialog'
 import { WHATSAPP_REQUEST_STATUSES, whatsappStatusTone, type WhatsappRequestStatus } from '@/src/lib/whatsapp-intake'
+import { quotationHrefForRole, suggestClients, whatsappConversionHref } from '@/src/lib/whatsapp-conversion'
+import { searchClients, type ClientOption } from '@/src/lib/client-search'
 
 type QuoteRequest = {
   id: string; codigo: string; cliente: string; modalidad: string; origen: string; destino: string; mercancia: string
   peso: string | null; volumen: string | null; bultos: string | null; incoterm: string | null; notas: string | null
   texto_original: string; solicitado_por_id: string; estado: WhatsappRequestStatus; creado_en: string
   estado_actualizado_en: string | null
+  quotation_id: string | null
 }
-type Person = { id: string; nombre: string | null; apellido: string | null }
+type Person = { id: string; nombre: string | null; apellido: string | null; rol?: string | null }
 
 const personName = (person?: Person) => person ? `${person.nombre || ''} ${person.apellido || ''}`.trim() || 'Sin nombre' : '—'
 
@@ -47,7 +52,7 @@ function WhatsappRequests() {
   const context = `${user?.id}:${tenantId}:${role}:${active}`
   const owner = useRef('')
 
-  const [state, setState] = useState<{ context: string; requests: QuoteRequest[]; people: Map<string, Person>; error: string } | null>(null)
+  const [state, setState] = useState<{ context: string; requests: QuoteRequest[]; people: Map<string, Person>; quotations: Map<string, string | null>; error: string } | null>(null)
   const [status, setStatus] = useState('Pendiente'), [query, setQuery] = useState('')
   const [page, setPage] = useState(1), [size, setSize] = useState(25)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -59,18 +64,26 @@ function WhatsappRequests() {
     try {
       // RLS limita a Ventas a sus propias solicitudes.
       const requests = await readAllReportRows<QuoteRequest>((from, to) => supabase.from('solicitudes_cotizacion')
-        .select('id,codigo,cliente,modalidad,origen,destino,mercancia,peso,volumen,bultos,incoterm,notas,texto_original,solicitado_por_id,estado,creado_en,estado_actualizado_en')
+        .select('id,codigo,cliente,modalidad,origen,destino,mercancia,peso,volumen,bultos,incoterm,notas,texto_original,solicitado_por_id,estado,creado_en,estado_actualizado_en,quotation_id')
         .eq('tenant_id', tenantId).order('creado_en', { ascending: false }).order('id').range(from, to), { label: 'las solicitudes', isCurrent })
       const ids = [...new Set(requests.map(request => request.solicitado_por_id))]
       const people = new Map<string, Person>()
       if (ids.length) {
-        const { data, error } = await supabase.from('profiles').select('id,nombre,apellido').eq('tenant_id', tenantId).in('id', ids)
+        const { data, error } = await supabase.from('profiles').select('id,nombre,apellido,rol').eq('tenant_id', tenantId).in('id', ids)
         if (error) throw new Error('No se pudieron cargar los vendedores. Reintenta la consulta.')
         for (const person of data || []) people.set(person.id, person)
       }
-      if (isCurrent()) setState({ context, requests, people, error: '' })
+      // Número de las cotizaciones creadas desde una solicitud (WA-04); RLS decide cuáles se ven.
+      const quotationIds = requests.map(request => request.quotation_id).filter((id): id is string => Boolean(id))
+      const quotations = new Map<string, string | null>()
+      if (quotationIds.length) {
+        const { data, error } = await supabase.from('quotations').select('id,quotation_number').in('id', quotationIds)
+        if (error) throw new Error('No se pudieron cargar las cotizaciones vinculadas. Reintenta la consulta.')
+        for (const quotation of data || []) quotations.set(quotation.id, quotation.quotation_number)
+      }
+      if (isCurrent()) setState({ context, requests, people, quotations, error: '' })
     } catch (error) {
-      if (isCurrent()) setState({ context, requests: [], people: new Map(), error: (error as Error).message })
+      if (isCurrent()) setState({ context, requests: [], people: new Map(), quotations: new Map(), error: (error as Error).message })
     }
   }, [canView, tenantId, context])
 
@@ -117,22 +130,25 @@ function WhatsappRequests() {
               <td className="py-3 pr-4">{request.cliente}</td>
               <td className="py-3 pr-4">{request.modalidad}</td>
               <td className="py-3 pr-4">{request.origen} → {request.destino}</td>
-              <td className="py-3 pr-4"><StatusBadge status={request.estado} /></td>
+              <td className="py-3 pr-4"><StatusBadge status={request.estado} />{request.quotation_id && <p className="mt-1 whitespace-nowrap text-xs text-slate-500">{current.quotations.get(request.quotation_id) || 'Cotización creada'}</p>}</td>
               <td className="py-3 text-right"><button type="button" className="text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setSelectedId(request.id)}>Ver detalle</button></td>
             </tr>)}</tbody>
           </table>
             <Pagination page={page} pageSize={size} total={filtered.length} onPageChange={setPage} onPageSizeChange={value => { setSize(value); setPage(1) }} />
           </div>}
     </div>
-    {selected && current && <RequestDialog request={selected} seller={personName(current.people.get(selected.solicitado_por_id))} canChangeStatus={canChangeStatus}
+    {selected && current && <RequestDialog request={selected} seller={personName(current.people.get(selected.solicitado_por_id))} sellerIsPricing={current.people.get(selected.solicitado_por_id)?.rol === 'Pricing'} canChangeStatus={canChangeStatus}
+      quotationNumber={selected.quotation_id ? current.quotations.get(selected.quotation_id) ?? null : null} tenantId={tenantId} role={role}
       onClose={() => setSelectedId(null)} onSaved={() => void load()} />}
   </div>
 }
 
-function RequestDialog({ request, seller, canChangeStatus, onClose, onSaved }: {
-  request: QuoteRequest; seller: string; canChangeStatus: boolean; onClose: () => void; onSaved: () => void
+function RequestDialog({ request, seller, sellerIsPricing, canChangeStatus, quotationNumber, tenantId, role, onClose, onSaved }: {
+  request: QuoteRequest; seller: string; sellerIsPricing: boolean; canChangeStatus: boolean; quotationNumber: string | null; tenantId: string; role: string | null | undefined; onClose: () => void; onSaved: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const converted = Boolean(request.quotation_id)
   const [origin] = useState(() => (typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null))
   // Se monta desde estado (sin DialogTrigger): devolver el foco al botón que lo abrió.
   const returnFocus = useCallback((event: Event) => {
@@ -161,7 +177,10 @@ function RequestDialog({ request, seller, canChangeStatus, onClose, onSaved }: {
     <DialogContent className="grid-cols-1 sm:max-w-2xl" onCloseAutoFocus={returnFocus}>
       <DialogTitle>Solicitud {request.codigo}</DialogTitle>
       <DialogDescription>Recibida el {formatDateTime(request.creado_en)}{request.estado_actualizado_en ? ` · estado actualizado el ${formatDateTime(request.estado_actualizado_en)}` : ''}</DialogDescription>
-      <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-slate-500">Estado</span><StatusBadge status={request.estado} /></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-slate-500">Estado</span><StatusBadge status={request.estado} />
+        {request.quotation_id && <Link href={quotationHrefForRole(role, request.quotation_id)} className="text-sm font-medium text-[#B3282D] underline dark:text-rose-300">
+          Ver cotización {quotationNumber || ''}</Link>}</div>
+      {converting && !converted && <ClientPicker request={request} seller={seller} sellerIsPricing={sellerIsPricing} tenantId={tenantId} onCancel={() => setConverting(false)} />}
       <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
         {fields.map(([label, value]) => <div key={label}><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-0.5 text-slate-900 dark:text-white">{value || '—'}</dd></div>)}
         <div className="sm:col-span-2"><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Notas</dt><dd className="mt-0.5 whitespace-pre-wrap text-slate-900 dark:text-white">{request.notas || '—'}</dd></div>
@@ -172,10 +191,60 @@ function RequestDialog({ request, seller, canChangeStatus, onClose, onSaved }: {
       </div>
       <div className="flex flex-wrap justify-end gap-2">
         <button type="button" className={secondaryButtonClass} disabled={busy} onClick={onClose}>Cerrar</button>
-        {canChangeStatus && WHATSAPP_REQUEST_STATUSES.filter(estado => estado !== request.estado).map(estado =>
-          <button key={estado} type="button" className={estado === 'Cotizada' ? primaryButtonClass : secondaryButtonClass} disabled={busy} onClick={() => void changeStatus(estado)}>
+        {canChangeStatus && !converted && !converting && <button type="button" className={`${primaryButtonClass} inline-flex items-center gap-2`} disabled={busy} onClick={() => setConverting(true)}>
+          <FilePlus2 size={16} aria-hidden="true" />Convertir en cotización</button>}
+        {canChangeStatus && !converted && WHATSAPP_REQUEST_STATUSES.filter(estado => estado !== request.estado && estado !== 'Cotizada').map(estado =>
+          <button key={estado} type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void changeStatus(estado)}>
             {busy ? 'Guardando…' : `Marcar ${estado.toLowerCase()}`}</button>)}
       </div>
     </DialogContent>
   </Dialog>
+}
+
+type ClientRow = ClientOption & { id: string; nombre: string | null }
+
+/** WA-04: elegir el cliente de la cotización; sugiere los parecidos al nombre escrito por el vendedor. */
+function ClientPicker({ request, seller, sellerIsPricing, tenantId, onCancel }: { request: QuoteRequest; seller: string; sellerIsPricing: boolean; tenantId: string; onCancel: () => void }) {
+  const router = useRouter()
+  const [clients, setClients] = useState<ClientRow[] | null>(null)
+  const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      const { data, error: loadError } = await supabase.from('clientes').select('id,nombre,codigo_cliente,rtn')
+        .eq('tenant_id', tenantId).is('deleted_at', null).order('nombre').limit(5000)
+      if (!active) return
+      if (loadError) setError('No se pudieron cargar los clientes.')
+      else setClients(data || [])
+    })()
+    return () => { active = false }
+  }, [tenantId])
+  const suggestions = useMemo(() => suggestClients(clients || [], request.cliente), [clients, request.cliente])
+  const results = useMemo(() => query.trim() ? searchClients(clients || [], query).slice(0, 8) : [], [clients, query])
+  const choose = (client: ClientRow | 'new') => router.push(whatsappConversionHref(request.id, client))
+  const row = (client: ClientRow, hint?: string) => <li key={client.id}>
+    <button type="button" className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => choose(client)}>
+      <span className="font-medium text-slate-900 dark:text-white">{client.nombre}{client.codigo_cliente && <span className="ml-2 text-xs font-normal text-slate-500">{client.codigo_cliente}</span>}</span>
+      {hint && <span className="shrink-0 text-xs text-slate-500">{hint}</span>}
+    </button></li>
+  return <section className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+    <p className="text-sm font-semibold text-slate-900 dark:text-white">Cliente de la cotización</p>
+    <p className="mt-1 text-xs text-slate-500">{seller} escribió “{request.cliente}”. {sellerIsPricing
+      ? 'Como la pidió Pricing, la cotización quedará a nombre del vendedor asignado al cliente; si no tiene uno válido o el cliente es nuevo, lo eliges en el formulario.'
+      : `La cotización y, si lo creas, el cliente quedarán a nombre de ${seller}.`}</p>
+    {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
+    {!clients && !error && <p className="mt-3 text-sm text-slate-500">Buscando clientes…</p>}
+    {clients && <>
+      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Coincidencias</p>
+      {suggestions.length ? <ul className="mt-1 space-y-1">{suggestions.map(item => row(item.client, item.score >= 0.9 ? 'Coincide' : 'Parecido'))}</ul>
+        : <p className="mt-1 text-sm text-slate-500">No hay clientes con un nombre parecido.</p>}
+      <FormField label="Buscar otro cliente" className="mt-3"><input className={fieldClassSm} value={query} placeholder="Nombre, código o RTN" onChange={event => setQuery(event.target.value)} /></FormField>
+      {results.length > 0 && <ul className="mt-1 space-y-1">{results.map(client => row(client))}</ul>}
+    </>}
+    <div className="mt-4 flex flex-wrap justify-end gap-2">
+      <button type="button" className={secondaryButtonClass} onClick={onCancel}>Volver</button>
+      <button type="button" className={`${secondaryButtonClass} inline-flex items-center gap-2`} onClick={() => choose('new')}><UserPlus size={16} aria-hidden="true" />Crear cliente nuevo</button>
+    </div>
+  </section>
 }

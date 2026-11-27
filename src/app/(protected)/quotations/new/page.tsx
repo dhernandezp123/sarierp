@@ -22,7 +22,8 @@ import {
 } from '@/src/lib/quotation-form'
 
 import { formatDate, toDateInputValue } from '@/src/lib/format'
-import { createQuotation } from '@/src/lib/quotation-create'
+import { convertWhatsappRequest, createQuotation } from '@/src/lib/quotation-create'
+import { buildWhatsappPrefill, quotationHrefForRole, type WhatsappQuoteRequestForConversion } from '@/src/lib/whatsapp-conversion'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -48,7 +49,7 @@ import { DuplicateCargoNotice, type DuplicateCargoNoticeData } from '@/src/compo
 import { QuotationActionBar } from '@/src/components/quotations/QuotationActionBar'
 import { QuotationCargoSection } from '@/src/components/quotations/QuotationCargoSection'
 import { QuotationClientProductSection } from '@/src/components/quotations/QuotationClientProductSection'
-import NewClientDialog, { type CreatedClient } from '@/src/components/clientes/NewClientDialog'
+import NewClientDialog, { type ClientDraft, type CreatedClient } from '@/src/components/clientes/NewClientDialog'
 import { QuotationConditionsSection } from '@/src/components/quotations/QuotationConditionsSection'
 import { QuotationContactSection } from '@/src/components/quotations/QuotationContactSection'
 import { QuotationInsuranceSection } from '@/src/components/quotations/QuotationInsuranceSection'
@@ -77,6 +78,9 @@ const formatNumber = (value: number, decimals = 2) =>
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
+
+// Opción temporal del selector para el cliente nuevo que crea la conversión de WhatsApp.
+const DRAFT_CLIENT_ID = '00000000-0000-4000-8000-00000000c11e'
 
 export default function NewQuotationPage() {
   const router = useRouter()
@@ -108,6 +112,16 @@ export default function NewQuotationPage() {
     quotation_number: string | null
   } | null>(null)
   const [reactivationMode, setReactivationMode] = useState(false)
+  // WA-04: solicitud de WhatsApp que se convierte en esta cotización y cliente nuevo pendiente.
+  const [whatsappSource, setWhatsappSource] = useState<{
+    request: WhatsappQuoteRequestForConversion
+    sellerName: string
+    // Si la pidió Pricing, la cotización queda a nombre del vendedor del cliente o del elegido.
+    requesterIsPricing: boolean
+    sellers: { id: string; name: string }[]
+  } | null>(null)
+  const [whatsappSellerChoice, setWhatsappSellerChoice] = useState('')
+  const [clientDraft, setClientDraft] = useState<ClientDraft | null>(null)
   // Carga de la cotización origen que no encaja en la estructura del producto actual.
   const [duplicateCargoNotice, setDuplicateCargoNotice] =
     useState<DuplicateCargoNoticeData | null>(null)
@@ -153,6 +167,7 @@ export default function NewQuotationPage() {
       loadDuplicateSource(duplicateFromId, shouldReactivate)
     }
   }, [])
+
 
   const fetchPricingUsers = async () => {
     const { data: pricingUsers } = await supabase
@@ -562,24 +577,107 @@ export default function NewQuotationPage() {
       (cliente) => cliente.id === clienteId
     )
 
-    const updatedData = {
-      ...formData,
+    if (clienteId !== DRAFT_CLIENT_ID) setClientDraft(null)
+    setFormData((previous) => ({
+      ...previous,
       cliente_id: clienteId,
-      miami_rate_destination: clienteId === formData.cliente_id ? formData.miami_rate_destination : '',
-      requires_insurance: clienteId === formData.cliente_id ? formData.requires_insurance : null,
-      insurance_taxable: clienteId === formData.cliente_id && formData.insurance_taxable,
+      miami_rate_destination: clienteId === previous.cliente_id ? previous.miami_rate_destination : '',
+      requires_insurance: clienteId === previous.cliente_id ? previous.requires_insurance : null,
+      insurance_taxable: clienteId === previous.cliente_id && previous.insurance_taxable,
       contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
       contact_state: selectedCliente?.departamento_estado || '',
       contact_country: selectedCliente?.pais || '',
-      origen: selectedCliente?.origen_frecuente || formData.origen,
+      origen: selectedCliente?.origen_frecuente || previous.origen,
       insurance_rate:
         selectedCliente?.seguro_porcentaje?.toString() || '1.0',
-    }
-
-    setFormData(updatedData)
+    }))
   }
+
+  // WA-04: dueño de la cotización convertida. Admin/Ventas: quien la pidió. Pricing: vendedor válido del
+  // cliente existente; si no hay (o el cliente es nuevo), el elegido por quien convierte.
+  const whatsappOwner = (() => {
+    if (!whatsappSource) return null
+    if (!whatsappSource.requesterIsPricing) {
+      return { id: whatsappSource.request.solicitado_por_id, name: whatsappSource.sellerName, fixed: true }
+    }
+    const cliente = clientDraft ? null : clientes.find((row) => row.id === formData.cliente_id)
+    const clientSeller = whatsappSource.sellers.find((seller) => seller.id === cliente?.vendedor_asignado)
+    if (clientSeller) return { id: clientSeller.id, name: clientSeller.name, fixed: true }
+    const chosen = whatsappSource.sellers.find((seller) => seller.id === whatsappSellerChoice)
+    return { id: chosen?.id || '', name: chosen?.name || '', fixed: false }
+  })()
+
+  // WA-04: cliente nuevo que se crea dentro de la conversión, a nombre del vendedor de la solicitud.
+  const handleClientDraft = (draft: ClientDraft) => {
+    const option = { id: DRAFT_CLIENT_ID, nombre: `${draft.nombre} (nuevo)`, contacto: draft.contacto, email_1: draft.email_1, telefono: draft.telefono, pais: draft.pais }
+    setClientes((current) => [option, ...current.filter((cliente) => cliente.id !== DRAFT_CLIENT_ID)])
+    handleClienteChange(DRAFT_CLIENT_ID, option)
+    setClientDraft(draft)
+  }
+
+
+  const loadWhatsappSource = async (requestId: string, clienteId: string | null, createClient: boolean) => {
+    setLoading(true)
+    try {
+      const { data: request, error } = await supabase
+        .from('solicitudes_cotizacion')
+        .select('id,codigo,cliente,modalidad,origen,destino,mercancia,peso,volumen,bultos,incoterm,notas,solicitado_por_id,quotation_id')
+        .eq('id', requestId)
+        .maybeSingle()
+      if (error || !request) {
+        toast.error('No se pudo cargar la solicitud de WhatsApp')
+        return
+      }
+      if (request.quotation_id) {
+        toast.error(`La solicitud ${request.codigo} ya fue convertida en cotización.`)
+        router.push(quotationHrefForRole(profile?.rol, request.quotation_id))
+        return
+      }
+      const { data: seller } = await supabase.from('profiles').select('nombre,apellido,rol').eq('id', request.solicitado_por_id).maybeSingle()
+      const sellerName = `${seller?.nombre || ''} ${seller?.apellido || ''}`.trim() || 'el vendedor'
+      const requesterIsPricing = seller?.rol === 'Pricing'
+      let sellers: { id: string; name: string }[] = []
+      if (requesterIsPricing) {
+        const { data: sellerRows } = await supabase.from('profiles').select('id,nombre,apellido')
+          .in('rol', ['Admin', 'Ventas']).eq('status', 'Aprobado').eq('is_active', true).eq('is_platform_admin', false).order('nombre')
+        sellers = (sellerRows || []).map((row) => ({ id: row.id, name: `${row.nombre || ''} ${row.apellido || ''}`.trim() || 'Sin nombre' }))
+      }
+      const prefill = buildWhatsappPrefill(request, sellerName)
+      setWhatsappSource({ request, sellerName, requesterIsPricing, sellers })
+
+      if (clienteId) {
+        const { data: cliente } = await supabase.from('clientes').select('*').eq('id', clienteId).is('deleted_at', null).maybeSingle()
+        if (cliente) handleClienteChange(cliente.id, cliente)
+        else toast.error('El cliente elegido ya no está disponible; selecciona otro.')
+      }
+      // Después del cliente: lo escrito en la solicitud tiene prioridad sobre el origen frecuente del cliente.
+      setFormData((previous) => ({ ...previous, ...prefill.fields }))
+      if (!prefill.modality) {
+        toast.info(`No se reconoció la modalidad "${request.modalidad}"`, { description: 'Elige producto, transporte y modalidad.' })
+      }
+      if (createClient) setNewClientName(request.cliente)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const requestId = params.get('fromWhatsapp')
+    if (!requestId || !profile) return
+    if (!['Admin', 'Pricing'].includes(profile.rol || '')) {
+      toast.error('Solo Admin y Pricing pueden convertir solicitudes de WhatsApp.')
+      return
+    }
+    const timer = window.setTimeout(() => {
+      void loadWhatsappSource(requestId, params.get('cliente'), params.get('nuevoCliente') === '1')
+    }, 0)
+    return () => window.clearTimeout(timer)
+    // Se carga una vez por usuario; el resto del formulario queda editable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
 
   const clearContainerLines = () => {
     setContainerLines([])
@@ -804,9 +902,28 @@ export default function NewQuotationPage() {
 
       const autoItems = automaticPricing.items
 
-      const quotation = await createQuotation(supabase, {
-        quotation: quotationPayload, containers: containerRows, cargo: cargoRows, pricing: autoItems,
-      })
+      if (whatsappSource && !whatsappOwner?.id) {
+        toast.error('Elige el vendedor a cuyo nombre quedará la cotización')
+        focusFormIssue('whatsapp_seller')
+        return
+      }
+      const creationLines = { quotation: quotationPayload, containers: containerRows, cargo: cargoRows, pricing: autoItems }
+      const quotation = whatsappSource
+        ? await convertWhatsappRequest(supabase, whatsappSource.request.id, {
+            ...creationLines,
+            quotation: { ...quotationPayload, cliente_id: clientDraft ? null : quotationPayload.cliente_id },
+          }, clientDraft, whatsappOwner?.fixed ? null : whatsappOwner?.id || null)
+        : await createQuotation(supabase, creationLines)
+      if (whatsappSource) {
+        await createActivityLog({
+          module: 'quotations',
+          action: 'whatsapp_request_converted',
+          entityType: 'quotation',
+          entityId: quotation.id,
+          description: `Cotización ${quotation.quotation_number || quotation.id} creada desde la solicitud de WhatsApp ${whatsappSource.request.codigo}`,
+          metadata: { requestId: whatsappSource.request.id, requestCode: whatsappSource.request.codigo },
+        })
+      }
 
       if (initialStatus === 'Pendiente de Fijar Precios') {
         const pricingUsers = await fetchPricingUsers()
@@ -898,7 +1015,7 @@ export default function NewQuotationPage() {
             ? `Borrador${createdNumber} guardado`
             : `Cotización${createdNumber} creada`
       )
-      router.push(`/quotations/${quotation.id}`)
+      router.push(whatsappSource ? quotationHrefForRole(profile?.rol, quotation.id) : `/quotations/${quotation.id}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo crear la cotización. Revisa los datos e intenta nuevamente.')
     } finally {
@@ -1134,13 +1251,17 @@ export default function NewQuotationPage() {
         open={newClientName !== null}
         onOpenChange={(open) => { if (!open) setNewClientName(null) }}
         initialName={newClientName || ''}
-        onCreated={handleClientCreated}
+        onCreated={whatsappSource ? undefined : handleClientCreated}
+        onDraft={whatsappSource ? handleClientDraft : undefined}
+        fixedSellerName={whatsappSource ? (whatsappOwner?.name || 'El vendedor que elijas en la cotización') : undefined}
       />
       <div className="max-w-6xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              {reactivationMode
+              {whatsappSource
+                ? `Convertir solicitud ${whatsappSource.request.codigo}`
+                : reactivationMode
                 ? 'Reactivar como nueva cotización'
                 : duplicateSource
                   ? 'Duplicar Cotización'
@@ -1162,6 +1283,25 @@ export default function NewQuotationPage() {
             Fecha de creación: {formatDate(todayString)}
           </p>
         </div>
+
+        {whatsappSource && (
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+            {whatsappOwner?.fixed
+              ? <>La cotización{clientDraft ? ' y el cliente nuevo' : ''} quedarán a nombre de {whatsappOwner.name}{whatsappSource.requesterIsPricing ? ', vendedor asignado al cliente' : ''}. </>
+              : <>La pidió {whatsappSource.sellerName} (Pricing): elige el vendedor a cuyo nombre quedará{clientDraft ? 'n la cotización y el cliente nuevo' : ' la cotización'}. </>}
+            Al guardar, la solicitud {whatsappSource.request.codigo} se vincula y queda como cotizada. Revisa los datos precargados y las notas internas.
+            {!whatsappOwner?.fixed && (
+              <label className="mt-3 block font-normal">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide">Vendedor <span className="text-red-500">*</span></span>
+                <select data-field="whatsapp_seller" className={`${fieldClass} ${submitted && !whatsappSellerChoice ? 'border-red-400' : ''}`}
+                  value={whatsappSellerChoice} onChange={(event) => setWhatsappSellerChoice(event.target.value)}>
+                  <option value="">Selecciona un vendedor Admin o Ventas</option>
+                  {whatsappSource.sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.name}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
+        )}
 
         {duplicateSource && (
           <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
