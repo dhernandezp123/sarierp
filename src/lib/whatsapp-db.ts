@@ -51,9 +51,11 @@ export async function crearSolicitudCotizacion(
     solicitadoPorId: string
     whatsappMessageId: string
     textoOriginal: string
+    /** COTIZACION NUEVA: registrar aunque repita una solicitud de las últimas 24 horas. */
+    forzar?: boolean
   },
-): Promise<{ id: string; codigo: string; creada: boolean }> {
-  const { tenantId, solicitadoPorId, whatsappMessageId, textoOriginal, ...datos } = input
+): Promise<{ id: string; codigo: string; creada: boolean; duplicada: boolean }> {
+  const { tenantId, solicitadoPorId, whatsappMessageId, textoOriginal, forzar = false, ...datos } = input
   const { data, error } = await whatsappAdminClient()
     .rpc('whatsapp_create_quote_request', {
       p_tenant_id: tenantId,
@@ -61,9 +63,10 @@ export async function crearSolicitudCotizacion(
       p_message_id: whatsappMessageId,
       p_data: datos,
       p_texto: textoOriginal,
+      p_force: forzar,
     })
     .single()
   if (error || !data) throw new Error(`No se pudo registrar la solicitud: ${error?.message ?? 'sin respuesta'}`)
-  const row = data as { id: string; codigo: string; created: boolean }
-  return { id: row.id, codigo: row.codigo, creada: row.created }
+  const row = data as { id: string; codigo: string; created: boolean; duplicate: boolean }
+  return { id: row.id, codigo: row.codigo, creada: row.created, duplicada: row.duplicate }
 }

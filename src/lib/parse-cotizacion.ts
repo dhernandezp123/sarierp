@@ -49,6 +49,7 @@ const ETIQUETAS: Record<string, keyof DatosCotizacion> = {
 
 export const FORMATO_AYUDA = [
   "Para registrar una solicitud, envíe un mensaje que empiece con COTIZACION, así:",
+  "Obligatorios: Cliente, Modalidad, Origen, Destino y Mercancía. Las líneas sin etiqueta se guardan como notas.",
   "",
   "COTIZACION",
   "Cliente: Distribuidora ABC",
@@ -62,7 +63,7 @@ export const FORMATO_AYUDA = [
   "Incoterm: FOB",
   "Notas: Requiere seguro",
   "",
-  "Obligatorios: Cliente, Modalidad, Origen, Destino y Mercancía.",
+  "Si repite una solicitud con los mismos datos en 24 horas no se registra de nuevo; para enviarla igual, empiece con COTIZACION NUEVA.",
 ].join("\n");
 
 function normalizar(s: string): string {
@@ -71,27 +72,56 @@ function normalizar(s: string): string {
     .replace(/[̀-ͯ]/g, "")
     .replace(/[*_]/g, "")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function primeraLinea(texto: string): string {
+  return normalizar(texto.trim().split(/\r?\n/)[0] ?? "");
 }
 
 /** El mensaje es una solicitud si su primera línea dice COTIZACION (con o sin tilde). */
 export function esSolicitud(texto: string): boolean {
-  const primeraLinea = texto.trim().split(/\r?\n/)[0] ?? "";
-  return normalizar(primeraLinea).startsWith("cotizacion");
+  return primeraLinea(texto).startsWith("cotizacion");
 }
 
+/** "COTIZACION NUEVA" registra la solicitud aunque repita una de las últimas 24 horas. */
+export function esSolicitudNueva(texto: string): boolean {
+  return /^cotizacion nueva\b/.test(primeraLinea(texto));
+}
+
+/**
+ * Lee las líneas "Etiqueta: valor". Las líneas sin etiqueta reconocida (sin ":" o con una
+ * etiqueta desconocida) se agregan a notas en el orden del mensaje, junto con el valor de
+ * "Notas:"; se omiten las vacías y la primera línea (COTIZACION).
+ */
 export function parseSolicitud(texto: string) {
   const datos: DatosCotizacion = {};
+  const notas: string[] = [];
+  let primera = true;
 
   for (const linea of texto.split(/\r?\n/)) {
-    const idx = linea.indexOf(":");
-    if (idx === -1) continue;
+    const contenido = linea.trim();
+    if (!contenido) continue;
+    if (primera) {
+      primera = false;
+      continue;
+    }
 
-    const campo = ETIQUETAS[normalizar(linea.slice(0, idx).replace(/^[\s\-•]+/, ""))];
-    const valor = linea.slice(idx + 1).trim();
-    if (campo && valor) datos[campo] = valor;
+    const idx = contenido.indexOf(":");
+    const campo = idx === -1 ? undefined : ETIQUETAS[normalizar(contenido.slice(0, idx).replace(/^[\s\-•]+/, ""))];
+    if (!campo) {
+      notas.push(contenido);
+      continue;
+    }
+
+    const valor = contenido.slice(idx + 1).trim();
+    if (!valor) continue;
+    if (campo === "notas") notas.push(valor);
+    else datos[campo] = valor;
   }
 
+  if (notas.length) datos.notas = notas.join("\n");
   const faltantes = OBLIGATORIOS.filter((c) => !datos[c]);
   return { datos, faltantes };
 }

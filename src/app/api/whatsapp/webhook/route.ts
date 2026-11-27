@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyKapsoSignature, sendWhatsAppText, soloDigitos } from "@/src/lib/kapso";
-import { esSolicitud, parseSolicitud, FORMATO_AYUDA } from "@/src/lib/parse-cotizacion";
+import { esSolicitud, esSolicitudNueva, parseSolicitud, FORMATO_AYUDA } from "@/src/lib/parse-cotizacion";
 import {
   buscarUsuarioPorWhatsapp,
   yaProcesado,
@@ -120,7 +120,16 @@ async function procesarMensaje(tenantId: string, evento: KapsoEvent) {
     solicitadoPorId: usuario.id,
     whatsappMessageId: msg.id,
     textoOriginal: texto,
+    forzar: esSolicitudNueva(texto),
   });
+
+  if (solicitud.duplicada) {
+    await sendWhatsAppText(
+      telefono,
+      `Ya existe la solicitud ${solicitud.codigo} con los mismos datos. Si es una solicitud distinta, envíela de nuevo empezando con COTIZACION NUEVA.`
+    );
+    return;
+  }
 
   if (!solicitud.creada) return; // reintento concurrente: ya se respondió
 

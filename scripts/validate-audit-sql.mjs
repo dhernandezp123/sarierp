@@ -46,6 +46,7 @@ const files = [
   'client_rate_access_and_audit.sql', 'compact_client_rate_history.sql', 'client_rate_sparse_save.sql',
   'aud03_supplier_payable_balances.sql', 'aud05_quotation_transitions.sql', 'won_quotation_pricing_adjustments.sql',
   'aud06_miami_assignment.sql', 'aud07_verified_environment.sql', 'aud08_email_delivery.sql', 'aud11_portal_incidents.sql',
+  'whatsapp_quote_requests.sql',
 ]
 for (const file of files) {
   let sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8').replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))

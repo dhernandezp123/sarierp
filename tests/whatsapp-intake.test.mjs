@@ -44,7 +44,7 @@ test('rutas: bandeja para Admin, Pricing y Ventas; números solo Admin', () => {
   for (const role of ['Pricing', 'Ventas', 'Operaciones', 'Contabilidad', 'Finanzas', 'Cliente']) assert.equal(permissions.canAccessPath(role, '/settings/whatsapp'), false, role)
 })
 
-function loadRoute(calls) {
+function loadRoute(calls, result = { id: 'r1', codigo: 'SQ-0001', creada: true, duplicada: false }) {
   class FakeResponse {
     constructor(body, init = {}) { this.body = body; this.status = init.status ?? 200 }
     static json(body, init = {}) { return new FakeResponse(body, init) }
@@ -59,7 +59,7 @@ function loadRoute(calls) {
     '@/src/lib/whatsapp-db': {
       buscarUsuarioPorWhatsapp: async (tenantId, phone) => { calls.push(['find', tenantId, phone]); return { id: 'u1', nombre: 'Ana' } },
       yaProcesado: async () => false,
-      crearSolicitudCotizacion: async (input) => { calls.push(['create', input.tenantId]); return { id: 'r1', codigo: 'SQ-0001', creada: true } },
+      crearSolicitudCotizacion: async (input) => { calls.push(['create', input.tenantId, input.forzar, input.notas]); return result },
     },
   })
 }
@@ -103,6 +103,85 @@ test('webhook: solo procesa eventos del phone_number_id configurado y con el ten
     assert.equal(calls.some(call => call[0] === 'find'), false)
     const batch = await route.POST(request(tenantA, { batch: true, data: [message('999'), { ...message('111'), phone_number_id: undefined, conversation: { phone_number_id: '111' } }] }))
     assert.equal(batch.status, 200)
-    assert.deepEqual(calls.filter(call => call[0] === 'find' || call[0] === 'create'), [['find', tenantA.id, '50499998888'], ['create', tenantA.id]])
+    assert.deepEqual(calls.filter(call => call[0] === 'find' || call[0] === 'create'), [['find', tenantA.id, '50499998888'], ['create', tenantA.id, false, undefined]])
   } finally { process.env = env }
+})
+
+const parser = loadTs('src/lib/parse-cotizacion.ts')
+
+test('parser: líneas sin etiqueta van a notas, sin la primera línea ni las vacías', () => {
+  const { datos, faltantes } = parser.parseSolicitud([
+    'COTIZACION urgente',
+    'Cliente: Distribuidora ABC',
+    'Favor cotizar con dos navieras',
+    '',
+    '- Modalidad: LCL',
+    'Origen: Shenzhen',
+    'Destino: San Pedro Sula',
+    'Notas: Requiere seguro',
+    'Mercancía: Repuestos',
+    'Hora de retiro: 10:00',
+    '   Contacto en origen Sr. Li   ',
+  ].join('\r\n'))
+  assert.deepEqual(faltantes, [])
+  assert.equal(datos.cliente, 'Distribuidora ABC')
+  assert.equal(datos.modalidad, 'LCL')
+  assert.equal(datos.mercancia, 'Repuestos')
+  assert.equal(datos.notas, 'Favor cotizar con dos navieras\nRequiere seguro\nHora de retiro: 10:00\nContacto en origen Sr. Li')
+})
+
+test('parser: sin líneas extra ni Notas no crea notas; etiqueta vacía no pasa a notas', () => {
+  const { datos, faltantes } = parser.parseSolicitud('COTIZACION\nCliente: ABC\nPeso:\nModalidad: FCL')
+  assert.equal(datos.notas, undefined)
+  assert.equal(datos.peso, undefined)
+  assert.deepEqual(faltantes, ['origen', 'destino', 'mercancia'])
+})
+
+test('parser: "5 cajas" sin etiqueta queda en notas', () => {
+  const { datos } = parser.parseSolicitud('COTIZACION\nCliente: ABC\n5 cajas\nModalidad: LCL\nOrigen: A\nDestino: B\nMercancía: Repuestos')
+  assert.equal(datos.notas, '5 cajas')
+})
+
+test('parser: COTIZACION NUEVA se reconoce como solicitud forzada y no pasa a notas', () => {
+  assert.equal(parser.esSolicitud('COTIZACION NUEVA\nCliente: A'), true)
+  assert.equal(parser.esSolicitudNueva('cotización   nueva\nCliente: A'), true)
+  assert.equal(parser.esSolicitudNueva('*COTIZACION NUEVA*'), true)
+  assert.equal(parser.esSolicitudNueva('COTIZACION\nNUEVA'), false)
+  assert.equal(parser.esSolicitudNueva('COTIZACION'), false)
+  assert.equal(parser.esSolicitudNueva('COTIZACION NUEVAS'), false)
+  assert.equal(parser.parseSolicitud('COTIZACION NUEVA\nCliente: A').datos.notas, undefined)
+  assert.match(parser.FORMATO_AYUDA, /COTIZACION NUEVA/)
+  assert.match(parser.FORMATO_AYUDA, /sin etiqueta se guardan como notas/)
+})
+
+async function runWebhook(text, result) {
+  const env = { ...process.env }
+  try {
+    process.env.KAPSO_TENANT_SLUG = 'sari'
+    process.env.KAPSO_PHONE_NUMBER_ID = '111'
+    const calls = []
+    const route = loadRoute(calls, result)
+    const event = message('111')
+    event.message.text.body = text
+    assert.equal((await route.POST(request(tenantA, event))).status, 200)
+    return calls
+  } finally { process.env = env }
+}
+
+const solicitud = 'COTIZACION\nCliente: ABC\nModalidad: LCL\nOrigen: Shenzhen\nDestino: SPS\nMercancía: Repuestos\n5 cajas'
+
+test('webhook: duplicado responde con el código existente y no confirma registro', async () => {
+  const calls = await runWebhook(solicitud, { id: 'r1', codigo: 'SQ-0007', creada: false, duplicada: true })
+  const sent = calls.filter(call => call[0] === 'send')
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0][2], 'Ya existe la solicitud SQ-0007 con los mismos datos. Si es una solicitud distinta, envíela de nuevo empezando con COTIZACION NUEVA.')
+  assert.deepEqual(calls.find(call => call[0] === 'create'), ['create', tenantA.id, false, '5 cajas'])
+})
+
+test('webhook: COTIZACION NUEVA pide registrar aunque coincida y confirma', async () => {
+  const calls = await runWebhook(solicitud.replace('COTIZACION', 'COTIZACION NUEVA'), { id: 'r2', codigo: 'SQ-0008', creada: true, duplicada: false })
+  assert.equal(calls.find(call => call[0] === 'create')[2], true)
+  const sent = calls.filter(call => call[0] === 'send')
+  assert.equal(sent.length, 1)
+  assert.match(sent[0][2], /Solicitud SQ-0008 registrada/)
 })
