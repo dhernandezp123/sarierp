@@ -105,3 +105,25 @@ test('el enlace a la cotización respeta el acceso de cada rol', () => {
   assert.equal(conversion.quotationHrefForRole('Admin', 'q1'), '/quotations/q1')
   assert.equal(conversion.quotationHrefForRole('Pricing', 'q1'), '/pricing-comparison?quotation=q1')
 })
+
+test('WA-05: medidas y valor declarado pasan a las notas internas', () => {
+  const { fields } = conversion.buildWhatsappPrefill({
+    id: 'r1', solicitado_por_id: 'u1', codigo: 'SQ-0009', cliente: 'X', modalidad: 'Aéreo', origen: 'Miami', destino: 'TGU', mercancia: 'Ropa',
+    peso: '12 kg', volumen: '0.05 cbm', medidas: '37x37x10 cms', bultos: '2', incoterm: null, valor_declarado: 'USD 450', notas: null,
+  }, 'Ana')
+  assert.match(fields.pricing_notes, /Medidas indicadas: 37x37x10 cms/)
+  assert.match(fields.pricing_notes, /Valor declarado indicado: USD 450/)
+  assert.equal(fields.volumen_cbm, '0.05')
+})
+
+test('WA-05: "Aereo Consolidado" del mensaje real -> Aéreo / Consolidado', () => {
+  assert.deepEqual(conversion.mapWhatsappModality('Aereo Consolidado'), { service_product: 'other_origin_air', tipo_transporte: 'Aéreo', quote_type: 'Consolidado' })
+  const { fields } = conversion.buildWhatsappPrefill({
+    id: 'r1', solicitado_por_id: 'u1', codigo: 'SQ-0010', cliente: 'BOMOHSA', modalidad: 'Aereo Consolidado', origen: 'Barranquilla', destino: 'San pedro Sula, Honduras.',
+    mercancia: 'Repuestos', peso: '25 kg', volumen: '4.5 cbm', medidas: '37x37x10 cms', bultos: '1 caja', incoterm: 'EXW', valor_declarado: '$1,180', notas: 'Requiere seguro.',
+  }, 'Ana')
+  assert.deepEqual([fields.service_product, fields.tipo_transporte, fields.quote_type], ['other_origin_air', 'Aéreo', 'Consolidado'])
+  assert.deepEqual([fields.peso_kg, fields.volumen_cbm, fields.cantidad_bultos, fields.incoterm], ['25', '4.5', '1', 'EXW'])
+  assert.match(fields.pricing_notes, /Medidas indicadas: 37x37x10 cms/)
+  assert.match(fields.pricing_notes, /Valor declarado indicado: \$1,180/)
+})

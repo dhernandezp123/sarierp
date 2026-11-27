@@ -23,7 +23,7 @@ import { searchClients, type ClientOption } from '@/src/lib/client-search'
 
 type QuoteRequest = {
   id: string; codigo: string; cliente: string; modalidad: string; origen: string; destino: string; mercancia: string
-  peso: string | null; volumen: string | null; bultos: string | null; incoterm: string | null; notas: string | null
+  peso: string | null; volumen: string | null; medidas: string | null; bultos: string | null; incoterm: string | null; valor_declarado: string | null; notas: string | null
   texto_original: string; solicitado_por_id: string; estado: WhatsappRequestStatus; creado_en: string
   estado_actualizado_en: string | null
   quotation_id: string | null
@@ -64,7 +64,7 @@ function WhatsappRequests() {
     try {
       // RLS limita a Ventas a sus propias solicitudes.
       const requests = await readAllReportRows<QuoteRequest>((from, to) => supabase.from('solicitudes_cotizacion')
-        .select('id,codigo,cliente,modalidad,origen,destino,mercancia,peso,volumen,bultos,incoterm,notas,texto_original,solicitado_por_id,estado,creado_en,estado_actualizado_en,quotation_id')
+        .select('id,codigo,cliente,modalidad,origen,destino,mercancia,peso,volumen,medidas,bultos,incoterm,valor_declarado,notas,texto_original,solicitado_por_id,estado,creado_en,estado_actualizado_en,quotation_id')
         .eq('tenant_id', tenantId).order('creado_en', { ascending: false }).order('id').range(from, to), { label: 'las solicitudes', isCurrent })
       const ids = [...new Set(requests.map(request => request.solicitado_por_id))]
       const people = new Map<string, Person>()
@@ -170,7 +170,7 @@ function RequestDialog({ request, seller, sellerIsPricing, canChangeStatus, quot
   const fields: [string, string | null][] = [
     ['Cliente', request.cliente], ['Vendedor', seller], ['Modalidad', request.modalidad], ['Incoterm', request.incoterm],
     ['Origen', request.origen], ['Destino', request.destino], ['Mercancía', request.mercancia], ['Peso', request.peso],
-    ['Volumen', request.volumen], ['Bultos', request.bultos],
+    ['Volumen', request.volumen], ['Medidas', request.medidas], ['Bultos', request.bultos], ['Valor declarado', request.valor_declarado],
   ]
 
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>

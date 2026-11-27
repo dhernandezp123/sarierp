@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyKapsoSignature, sendWhatsAppText, soloDigitos } from "@/src/lib/kapso";
-import { esSolicitud, esSolicitudNueva, parseSolicitud, FORMATO_AYUDA } from "@/src/lib/parse-cotizacion";
+import { esSolicitud, esSolicitudNueva, mensajeFaltantes, parseSolicitud, FORMATO_AYUDA } from "@/src/lib/parse-cotizacion";
 import {
   buscarUsuarioPorWhatsapp,
   yaProcesado,
@@ -107,10 +107,8 @@ async function procesarMensaje(tenantId: string, evento: KapsoEvent) {
   const { datos, faltantes } = parseSolicitud(texto);
 
   if (faltantes.length > 0) {
-    await sendWhatsAppText(
-      telefono,
-      `Faltan datos obligatorios: ${faltantes.join(", ")}.\n\nCorrija y envíe de nuevo la solicitud completa.`
-    );
+    // Lo leído como plantilla para que el vendedor solo complete lo que falta.
+    await sendWhatsAppText(telefono, mensajeFaltantes(datos, faltantes));
     return;
   }
 

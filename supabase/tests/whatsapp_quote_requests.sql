@@ -177,4 +177,13 @@ set local role authenticated;
 select pg_temp.as_user(1);
 select pg_temp.expect_error($$select * from public.whatsapp_create_quote_request('e5a10000-0000-4000-8000-000000000100', 'e5a10000-0000-4000-8000-000000000003', 'wamid.X9', '{"cliente":"X","modalidad":"LCL","origen":"A","destino":"B","mercancia":"C"}', 'x', true)$$, 'permission denied', 'authenticated no usa la alta con p_force');
 
+-- WA-05. Medidas y valor declarado se guardan en su propio campo.
+reset role;
+set local role service_role;
+insert into ids select 'm1', id from public.whatsapp_create_quote_request('e5a10000-0000-4000-8000-000000000100', 'e5a10000-0000-4000-8000-000000000004', 'wamid.M1',
+  '{"cliente":"Comercial Hernandez","modalidad":"Aereo","origen":"Miami","destino":"Tegucigalpa","mercancia":"Ropa","volumen":"0.05 cbm","medidas":"37x37x10 cms","valor":"USD 450"}', 'x');
+reset role;
+select pg_temp.assert_true((select volumen = '0.05 cbm' and medidas = '37x37x10 cms' and valor_declarado = 'USD 450' from public.solicitudes_cotizacion where id = (select id from ids where name = 'm1')), 'medidas y valor declarado guardados sin pisar volumen');
+select pg_temp.expect_error($$update public.solicitudes_cotizacion set medidas = repeat('x', 501) where id = (select id from ids where name = 'm1')$$, 'check', 'medidas con limite');
+
 rollback;

@@ -623,7 +623,7 @@ export default function NewQuotationPage() {
     try {
       const { data: request, error } = await supabase
         .from('solicitudes_cotizacion')
-        .select('id,codigo,cliente,modalidad,origen,destino,mercancia,peso,volumen,bultos,incoterm,notas,solicitado_por_id,quotation_id')
+        .select('id,codigo,cliente,modalidad,origen,destino,mercancia,peso,volumen,medidas,bultos,incoterm,valor_declarado,notas,solicitado_por_id,quotation_id')
         .eq('id', requestId)
         .maybeSingle()
       if (error || !request) {

@@ -16,8 +16,10 @@ export type WhatsappQuoteRequestForConversion = {
   mercancia: string
   peso: string | null
   volumen: string | null
+  medidas?: string | null
   bultos: string | null
   incoterm: string | null
+  valor_declarado?: string | null
   notas: string | null
 }
 
@@ -119,7 +121,9 @@ export function buildWhatsappPrefill(request: WhatsappQuoteRequestForConversion,
     `Cliente indicado: ${request.cliente}. Modalidad indicada: ${request.modalidad}.`,
     request.peso && `Peso indicado: ${request.peso}.`,
     request.volumen && `Volumen indicado: ${request.volumen}.`,
+    request.medidas && `Medidas indicadas: ${request.medidas}.`,
     request.bultos && `Bultos indicados: ${request.bultos}.`,
+    request.valor_declarado && `Valor declarado indicado: ${request.valor_declarado}.`,
     request.notas && `Notas: ${request.notas}`,
   ].filter(Boolean).join('\n')
   return {
